@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { TopBar } from './TopBar';
+import { TopBar } from '@/components/layout/TopBar';
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (

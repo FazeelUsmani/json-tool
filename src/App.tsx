@@ -1,5 +1,5 @@
-import { AppShell } from './components/layout/AppShell';
-import { ResizablePanes } from './components/layout/ResizablePanes';
+import { AppShell } from '@/components/layout/AppShell';
+import { ResizablePanes } from '@/components/layout/ResizablePanes';
 
 function EditorPlaceholder() {
   return (
