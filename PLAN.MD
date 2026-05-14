@@ -48,6 +48,8 @@ flowchart LR
 
 **Offset safety:** byte offsets stored in the index must land on structural token boundaries (between tokens), never inside a string or number. `Blob.slice` is byte-indexed; a mid-character UTF-8 cut produces invalid input for `JSON.parse`. Snap offsets to nearest structural boundary at index-build time, not lazy-expand time. The Day-1 spike (Week 1 Mon) tests this explicitly.
 
+**Known future scaling risk — `FlatNode[]` memory growth:** the flat array indexed by `react-window` is a single linear buffer. If a user expands an array with 5M+ children, the array balloons even though the underlying JSON stays in the worker. Not a Month 1 problem (cap visible-expanded children at ~100k with a "show more" stub), but Month 2+ likely needs segmented flat buffers, windowed materialization, and eviction. Track in `Out of scope` until profiling shows it as the actual ceiling.
+
 ---
 
 ## Week dependency shape
@@ -148,7 +150,7 @@ Day-1 spike on `stream-json` in a Vite worker is non-negotiable — finding out 
 ├── benchmarks/
 │   ├── README.md
 │   ├── corpus/                       # gitignored
-│   ├── generate.mjs                  # synth 50/200/500/1024 MB fixtures
+│   ├── generate.mjs                  # synth fixtures (see "Benchmark fixture shapes" in W3)
 │   └── run.mjs                       # Playwright-driven benchmark
 ├── .nvmrc · .env.example · .prettierrc · eslint.config.js
 ├── vite.config.ts · tsconfig.json · tailwind.config.ts · postcss.config.js
@@ -287,7 +289,22 @@ The moat. Architecture is the mermaid above. Concrete behavior:
 | Tue | In-worker `chunkedTree` store: build spine + offset index from stream events | `lib/json/chunkedTree.ts` |
 | Wed | Lazy expand: tree row → worker fetches slice → returns subtree FlatNodes; splice into flat array | TreeView wiring, worker RPC |
 | Thu | Search slow path with progress; memory monitoring HUD (toggle via `?debug=1`, reads `performance.memory` when available) | `workers/search.worker.ts` |
-| Fri | Benchmark on 50/200/500MB. Tune. Fix worst regressions. | `benchmarks/run.mjs` |
+| Fri | Benchmark on the fixture matrix below (not on a single synthesized array of objects — competitors win on synthetic JSON nobody has). Tune. Fix worst regressions. | `benchmarks/run.mjs` |
+
+**Benchmark fixture shapes (`generate.mjs` produces all of these):**
+
+| Shape | Size targets | Why |
+|---|---|---|
+| `flat-array.json` | 50 / 200 / 500MB | Baseline: array of similar objects (log-line shape). Easiest case. |
+| `deep-nested.json` | 5 / 20MB | 1000+ levels deep. Tree-recursion / stack-limit stressor. |
+| `wide-object.json` | 50 / 200MB | Single object with 1M+ keys. Tests key-search / Map performance. |
+| `giant-array.json` | 200 / 500MB | Array with 10M+ small elements. Tests virtualization + offset-index granularity. |
+| `unicode-heavy.json` | 50MB | Emoji + CJK + escape sequences at known offsets. UTF-8 slice safety. |
+| `long-strings.json` | 100MB | A few values that are individually 50MB+. Tests "expand single string" UX. |
+| `telemetry.json` | 200MB | Realistic mixed shape: timestamps, IDs, nested events, nulls, sparse fields. Closest to user reality. |
+| `pathological.json` | 50MB | Repeated keys (RFC-allowed), trailing-comma-adjacent, escaped quotes, BOM. Robustness. |
+
+Competitor benchmark video uses `telemetry.json` (most realistic) + `flat-array.json` (most flattering) so head-to-head numbers are honest.
 
 **Realistic ceilings — be honest:**
 
@@ -296,9 +313,11 @@ The moat. Architecture is the mermaid above. Concrete behavior:
 | 50MB instant | 95% | Yes |
 | 200MB smooth | 80% | Yes |
 | 500MB usable (indexed, progress bar) | 55–65% | **Lead the launch with this** |
-| 1GB streamed | 20–30% | Stretch. Don't promise. |
+| 1GB streamed | 20–30% | **Internal stretch only — never in public copy, OG image, HN post, or SEO landings.** HN commenters will test pathological GB files to break it; don't give them the target. |
 
 Launch narrative: **"500MB JSON in your browser. In 30 seconds. Without crashing."**
+
+**Public-claim ceiling:** 500MB. All marketing surfaces (`/large-json-viewer` hero, OG image, HN title, benchmark video voiceover, screenshot captions) stop at 500MB. 1GB performance is internal benchmarking only.
 
 **Pre-bake both narratives by Fri W3** (no panic drafting on launch day):
 - **A-narrative (500MB hits):** "500MB JSON in your browser, in 30s, without crashing." HN post, OG image, benchmark video.
@@ -315,7 +334,7 @@ Launch narrative: **"500MB JSON in your browser. In 30 seconds. Without crashing
 
 | Day | Task | Files |
 |---|---|---|
-| Mon | Schema inference (`schema.worker.ts`): walk spine + reservoir; emit JSON Schema / TS interface / Zod. Roll our own — don't pull `quicktype` (~1MB). | `workers/schema.worker.ts`, `lib/json/inferSchema.ts` |
+| Mon | Schema inference (`schema.worker.ts`): walk spine + reservoir; emit JSON Schema / TS interface / Zod. Roll our own — don't pull `quicktype` (~1MB). **Bounded scope (in-scope):** primitive types, arrays, object structure, nullable detection. **Explicitly out (Month 2+):** union inference, enum inference, recursive merging across siblings, format detection (date/email/UUID), reference detection. Schema spirals fast — keep the surface small or it eats W4. | `workers/schema.worker.ts`, `lib/json/inferSchema.ts` |
 | Tue | JSON repair UX: wire `jsonrepair`; show "we fixed X / Y / Z" diff before applying | `components/editor/EditorToolbar.tsx` |
 | Wed | SEO landing copy: hero, "open with your file", benchmark table with screenshots, three-differentiator sections. TSX with prose Tailwind, no MDX. | `pages/seo/*` |
 | Thu | Email capture (CF Worker → KV); shareable links (Worker + KV; gzipped JSON ≤1MB; ~30 LoC); Plausible custom events firing | new CF Worker, `lib/analytics.ts` |
@@ -375,6 +394,7 @@ These are off-keyboard tasks that validate the strategic bet. Skipping them mean
 
 Binary checklist (no "mostly"):
 
+- [x] **Day-1 spike (2026-05-14):** parser locked = `@streamparser/json`. (a) bundles in Vite ES-module worker ✓. (b)+(c)+(d) all pass on ASCII + UTF-8 builtin fixtures ✓. 50MB telemetry fixture: parser handles correctly (fires onValue for top-level `events`); spike's placeholder string-search offset recovery confirmed unviable on formatted JSON (expected) — **production offset capture must use `@streamparser/json`'s `Tokenizer.onToken` (per-token byte offsets), not high-level `onValue` + string-search**. Captured as W3 priority. Two implementation notes: do NOT call `parser.end()` when input is complete (auto-finalizes; second call throws); snap captured offsets to structural token boundaries per the Offset-safety rule in Architecture.
 - [ ] Public URL live (CF Pages or custom domain)
 - [ ] Name picked, domain + GitHub org + Twitter handle registered (by Fri W2)
 - [ ] Paste 1MB JSON → format → tree expands smoothly

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Benchmark fixtures — large, regenerable
+benchmarks/corpus/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

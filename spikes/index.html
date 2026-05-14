@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Day-1 Spike — parser byte offsets</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: ui-monospace, SF Mono, Menlo, Consolas, monospace;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 4rem;
+        line-height: 1.5;
+      }
+      h1 { margin: 0 0 0.5rem; font-size: 1.4rem; }
+      .sub { color: #888; font-size: 0.9rem; margin: 0 0 1.5rem; }
+      ul.legend { color: #555; font-size: 0.85rem; padding-left: 1.2rem; }
+      .row { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
+      select, button { padding: 0.5rem 0.9rem; font: inherit; cursor: pointer; }
+      button[disabled] { opacity: 0.5; cursor: not-allowed; }
+      .case {
+        margin: 0.75rem 0;
+        padding: 0.75rem 1rem;
+        border-left: 4px solid #ccc;
+        background: rgba(127, 127, 127, 0.06);
+        border-radius: 4px;
+      }
+      .case.pass { border-left-color: #0a7700; }
+      .case.fail { border-left-color: #cc0000; }
+      .case.pending { border-left-color: #888; }
+      .case h2 { margin: 0 0 0.25rem; font-size: 1rem; }
+      .case pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; color: #444; }
+      .tag { display: inline-block; padding: 0 0.4rem; margin-right: 0.4rem; border-radius: 3px; font-size: 0.75rem; }
+      .tag.pass { background: #c8e6c9; color: #0a4f10; }
+      .tag.fail { background: #ffcdd2; color: #7a0010; }
+      .tag.pending { background: #eee; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Day-1 Spike — parser byte offsets</h1>
+    <p class="sub">PLAN.MD Week 1 Mon. 4-hour budget; decision before EOD.</p>
+    <ul class="legend">
+      <li><b>(a)</b> Parser bundles cleanly inside a Vite worker</li>
+      <li><b>(b)</b> Per-value <code>{byteStart, byteEnd}</code> captureable</li>
+      <li><b>(c)</b> <code>Blob.slice(start, end) → JSON.parse</code> round-trips equal</li>
+      <li><b>(d)</b> Slice boundaries never land mid-character (UTF-8 safe)</li>
+    </ul>
+
+    <div class="row">
+      <label>Parser:</label>
+      <select id="parser">
+        <option value="streamparser">@streamparser/json</option>
+        <option value="streamjson">stream-json</option>
+      </select>
+      <button id="run-builtin">Run builtin (ASCII + UTF-8)</button>
+      <button id="pick-file">Run on file…</button>
+      <input id="file-input" type="file" accept=".json,application/json" hidden />
+    </div>
+
+    <div id="results"></div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
