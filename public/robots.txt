@@ -1,0 +1,7 @@
+# Temporary: blocks all crawler indexing during the .pages.dev preview phase.
+# Swap to "Allow: /" + add a Sitemap: line when the brand domain lands W2-Wed
+# and we cut over from .pages.dev. Sitemap.xml itself ships W2-Thu (deferred
+# because <loc> entries need canonical absolute URLs we don't have yet).
+
+User-agent: *
+Disallow: /
