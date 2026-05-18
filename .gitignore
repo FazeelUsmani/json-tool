@@ -14,6 +14,7 @@ dist-ssr
 
 # Benchmark fixtures — large, regenerable
 benchmarks/corpus/
+benchmarks/dev-*.json
 
 # Editor directories and files
 .vscode/*

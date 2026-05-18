@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
+import { List, type RowComponentProps } from 'react-window';
 import { useDocumentStore } from '@/state/documentStore';
 import { useViewStore } from '@/state/viewStore';
 import {
   parseToTree,
   type ParseTreeError,
 } from '@/lib/tree/parse';
-import { deriveVisible } from '@/lib/tree/flatten';
+import { deriveVisible, type FlatRow } from '@/lib/tree/flatten';
 import { TreeNode } from './TreeNode';
 
 // W2-Mon: tree pane now reads from the flat row array in viewStore. The
 // 150ms debounce keeps typing in Monaco from re-parsing on every keystroke;
 // previous successful parse stays visible during the debounce window.
+// W2-Tue: render via react-window's <List> so only visible rows are
+// mounted. Row height locked at 24px (per stack); list fills its parent
+// height via style={{height:'100%'}} so no pixel hardcoding here.
 const PARSE_DEBOUNCE_MS = 150;
+const ROW_HEIGHT = 24;
 
 export function TreeView() {
   const text = useDocumentStore((s) => s.text);
@@ -56,10 +61,29 @@ export function TreeView() {
     return null;
   }
   return (
-    <div className="h-full overflow-auto p-3 font-mono text-xs leading-relaxed">
-      {visible.map((row) => (
-        <TreeNode key={row.id} row={row} />
-      ))}
+    <div className="h-full font-mono text-xs">
+      <List
+        rowComponent={VirtualRow}
+        rowCount={visible.length}
+        rowHeight={ROW_HEIGHT}
+        rowProps={{ rows: visible }}
+        overscanCount={10}
+        style={{ height: '100%' }}
+      />
+    </div>
+  );
+}
+
+function VirtualRow({
+  index,
+  style,
+  rows,
+}: RowComponentProps<{ rows: FlatRow[] }>) {
+  // The List positions each row absolutely via `style`; we wrap TreeNode
+  // so we don't need to thread the style prop through every row variant.
+  return (
+    <div style={style}>
+      <TreeNode row={rows[index]} />
     </div>
   );
 }
