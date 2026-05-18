@@ -20,9 +20,13 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.json', '.ndjson', '.jsonl'] as const;
 
 function useDarkClass(): boolean {
-  const [isDark, setIsDark] = useState(() =>
-    document.documentElement.classList.contains('dark'),
-  );
+  // Guard for SSG: vite-react-ssg prerenders this component in Node, where
+  // `document` doesn't exist. Default to light during prerender; the real
+  // value is applied on hydration via the MutationObserver effect.
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    return document.documentElement.classList.contains('dark');
+  });
   useEffect(() => {
     const obs = new MutationObserver(() => {
       setIsDark(document.documentElement.classList.contains('dark'));
