@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { List, type RowComponentProps } from 'react-window';
+import { List, useListRef, type RowComponentProps } from 'react-window';
 import { useDocumentStore } from '@/state/documentStore';
 import { useViewStore } from '@/state/viewStore';
 import {
@@ -7,14 +7,20 @@ import {
   type ParseTreeError,
 } from '@/lib/tree/parse';
 import { deriveVisible, type FlatRow } from '@/lib/tree/flatten';
+import { findMatches } from '@/lib/tree/search';
 import { TreeNode } from './TreeNode';
+import { TreeSearch } from './TreeSearch';
 
-// W2-Mon: tree pane now reads from the flat row array in viewStore. The
-// 150ms debounce keeps typing in Monaco from re-parsing on every keystroke;
+// W2-Mon: tree pane reads from the flat row array in viewStore. The 150ms
+// debounce keeps typing in Monaco from re-parsing on every keystroke; the
 // previous successful parse stays visible during the debounce window.
-// W2-Tue: render via react-window's <List> so only visible rows are
-// mounted. Row height locked at 24px (per stack); list fills its parent
-// height via style={{height:'100%'}} so no pixel hardcoding here.
+//
+// W2-Tue: render via react-window's <List> so only visible rows are mounted.
+// Row height locked at 24px; the List fills its parent via style.
+//
+// W2-Wed: search bar above the list. When a query is active, the `closed`
+// Set is ignored for visibility (search match in a collapsed subtree should
+// still show); clearing the query restores the collapse state.
 const PARSE_DEBOUNCE_MS = 150;
 const ROW_HEIGHT = 24;
 
@@ -23,9 +29,10 @@ export function TreeView() {
   const setRoot = useViewStore((s) => s.setRoot);
   const flat = useViewStore((s) => s.flat);
   const closed = useViewStore((s) => s.closed);
-  // ParseError stays local to TreeView — it's about the last parse attempt,
-  // not the document's view state. viewStore stays focused on flat + closed.
+  const query = useViewStore((s) => s.query);
   const [parseError, setParseError] = useState<ParseTreeError | null>(null);
+  const [currentMatch, setCurrentMatch] = useState(0);
+  const listRef = useListRef(null);
 
   useEffect(() => {
     if (text.trim() === '') {
@@ -40,14 +47,65 @@ export function TreeView() {
         setParseError(null);
       } else {
         setParseError(result.error);
-        // Keep the previous flat array on parse failure — user sees the
-        // last good tree while they fix the JSON.
       }
     }, PARSE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [text, setRoot]);
 
-  const visible = useMemo(() => deriveVisible(flat, closed), [flat, closed]);
+  const { matchIndices, visibleSet } = useMemo(
+    () => findMatches(flat, query),
+    [flat, query],
+  );
+
+  // Reset the match cursor when the query (and therefore the match set)
+  // changes. Otherwise the user clears search → types a new one → arrow
+  // navigation starts from a stale index.
+  useEffect(() => {
+    setCurrentMatch(0);
+  }, [query]);
+
+  // Build the visible-rows array AND a flat-index → visible-index map in
+  // one pass. The map is needed so jump-to-match can call scrollToRow with
+  // the right list index (matchIndices are flat indices, the List speaks
+  // in visible-row positions).
+  const { visibleRows, flatToVisible } = useMemo(() => {
+    if (query) {
+      const rows: FlatRow[] = [];
+      const map = new Map<number, number>();
+      for (let i = 0; i < flat.length; i++) {
+        if (visibleSet.has(i)) {
+          map.set(i, rows.length);
+          rows.push(flat[i]);
+        }
+      }
+      return { visibleRows: rows, flatToVisible: map };
+    }
+    // No query: fall back to the collapse-aware filter.
+    const rows = deriveVisible(flat, closed);
+    const map = new Map<number, number>();
+    // Identity match (deriveVisible returns references into `flat`).
+    let vi = 0;
+    for (let i = 0; i < flat.length; i++) {
+      if (rows[vi] === flat[i]) {
+        map.set(i, vi);
+        vi++;
+      }
+    }
+    return { visibleRows: rows, flatToVisible: map };
+  }, [flat, closed, query, visibleSet]);
+
+  const handleJump = (direction: 'next' | 'prev') => {
+    if (matchIndices.length === 0) return;
+    const next =
+      direction === 'next'
+        ? (currentMatch + 1) % matchIndices.length
+        : (currentMatch - 1 + matchIndices.length) % matchIndices.length;
+    setCurrentMatch(next);
+    const visibleIdx = flatToVisible.get(matchIndices[next]);
+    if (visibleIdx !== undefined) {
+      listRef.current?.scrollToRow({ index: visibleIdx, align: 'smart' });
+    }
+  };
 
   if (text.trim() === '') {
     return (
@@ -61,15 +119,23 @@ export function TreeView() {
     return null;
   }
   return (
-    <div className="h-full font-mono text-xs">
-      <List
-        rowComponent={VirtualRow}
-        rowCount={visible.length}
-        rowHeight={ROW_HEIGHT}
-        rowProps={{ rows: visible }}
-        overscanCount={10}
-        style={{ height: '100%' }}
+    <div className="flex h-full flex-col font-mono text-xs">
+      <TreeSearch
+        matchCount={matchIndices.length}
+        currentMatch={currentMatch}
+        onJump={handleJump}
       />
+      <div className="min-h-0 flex-1">
+        <List
+          listRef={listRef}
+          rowComponent={VirtualRow}
+          rowCount={visibleRows.length}
+          rowHeight={ROW_HEIGHT}
+          rowProps={{ rows: visibleRows }}
+          overscanCount={10}
+          style={{ height: '100%' }}
+        />
+      </div>
     </div>
   );
 }
@@ -79,8 +145,6 @@ function VirtualRow({
   style,
   rows,
 }: RowComponentProps<{ rows: FlatRow[] }>) {
-  // The List positions each row absolutely via `style`; we wrap TreeNode
-  // so we don't need to thread the style prop through every row variant.
   return (
     <div style={style}>
       <TreeNode row={rows[index]} />

@@ -22,8 +22,12 @@ export function TreeNode({ row }: { row: FlatRow }) {
 
 function OpenRow({ row }: { row: Extract<FlatRow, { kind: 'open' }> }) {
   const closed = useViewStore((s) => s.closed);
+  const query = useViewStore((s) => s.query);
   const toggle = useViewStore((s) => s.toggle);
-  const isClosed = closed.has(row.id);
+  // Search overrides collapse: while a query is active, every composite
+  // renders open so search matches inside collapsed subtrees are visible.
+  // The `closed` Set itself is preserved — clearing the query restores it.
+  const isClosed = query === '' && closed.has(row.id);
   const isObj = row.node.kind === 'object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
@@ -149,17 +153,18 @@ function KeyLabel({
   name: string | null;
   parentKind: ParentKind;
 }) {
+  const query = useViewStore((s) => s.query);
   if (name === null) return null;
   if (parentKind === 'array') {
     return (
       <span className="text-muted-foreground">
-        [{name}]:{' '}
+        [{highlight(name, query)}]:{' '}
       </span>
     );
   }
   return (
     <span className="text-foreground/80">
-      &quot;{name}&quot;:{' '}
+      &quot;{highlight(name, query)}&quot;:{' '}
     </span>
   );
 }
@@ -194,24 +199,57 @@ function CountPill({
 }
 
 function Value({ node }: { node: PrimitiveNode }) {
+  const query = useViewStore((s) => s.query);
   switch (node.kind) {
     case 'string':
       return (
         <span className="text-green-700 dark:text-green-400">
-          &quot;{node.value}&quot;
+          &quot;{highlight(node.value, query)}&quot;
         </span>
       );
     case 'number':
       return (
-        <span className="text-blue-700 dark:text-blue-400">{node.value}</span>
+        <span className="text-blue-700 dark:text-blue-400">
+          {highlight(String(node.value), query)}
+        </span>
       );
     case 'boolean':
       return (
         <span className="text-purple-700 dark:text-purple-400">
-          {String(node.value)}
+          {highlight(String(node.value), query)}
         </span>
       );
     case 'null':
+      // null isn't a search target by design.
       return <span className="text-muted-foreground">null</span>;
   }
+}
+
+// Wraps each case-insensitive substring match of `needle` in <mark>. Empty
+// needle is a fast-path that returns the text unchanged.
+function highlight(text: string, needle: string): React.ReactNode {
+  if (!needle) return text;
+  const lower = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+  while (i < text.length) {
+    const idx = lower.indexOf(lowerNeedle, i);
+    if (idx === -1) {
+      parts.push(text.slice(i));
+      break;
+    }
+    if (idx > i) parts.push(text.slice(i, idx));
+    parts.push(
+      <mark
+        key={key++}
+        className="rounded-sm bg-yellow-200/70 px-0.5 dark:bg-yellow-600/40"
+      >
+        {text.slice(idx, idx + needle.length)}
+      </mark>,
+    );
+    i = idx + needle.length;
+  }
+  return parts;
 }

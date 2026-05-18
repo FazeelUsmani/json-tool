@@ -26,17 +26,22 @@ enableMapSet();
 type ViewState = {
   flat: FlatRow[];
   closed: Set<string>;
+  // Empty string when no search is active. The (b) visibility rule treats
+  // closed as ignored during search — see search.ts.
+  query: string;
 };
 
 type ViewActions = {
   setRoot: (root: TreeNode | null) => void;
   toggle: (id: string) => void;
+  setQuery: (query: string) => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
   immer((set) => ({
     flat: [],
     closed: new Set<string>(),
+    query: '',
     setRoot: (root) =>
       set((state) => {
         state.flat = root === null ? [] : flattenTree(root);
@@ -48,6 +53,10 @@ export const useViewStore = create<ViewState & ViewActions>()(
         } else {
           state.closed.add(id);
         }
+      }),
+    setQuery: (query) =>
+      set((state) => {
+        state.query = query;
       }),
   })),
 );
