@@ -94,6 +94,11 @@ export function TreeView() {
     return { visibleRows: rows, flatToVisible: map };
   }, [flat, closed, query, visibleSet]);
 
+  // Memoized so react-window's internal prop-change detector doesn't
+  // re-render every visible row on every parent render when the row data
+  // is stable.
+  const rowProps = useMemo(() => ({ rows: visibleRows }), [visibleRows]);
+
   const handleJump = (direction: 'next' | 'prev') => {
     if (matchIndices.length === 0) return;
     const next =
@@ -131,7 +136,7 @@ export function TreeView() {
           rowComponent={VirtualRow}
           rowCount={visibleRows.length}
           rowHeight={ROW_HEIGHT}
-          rowProps={{ rows: visibleRows }}
+          rowProps={rowProps}
           overscanCount={10}
           style={{ height: '100%' }}
         />
