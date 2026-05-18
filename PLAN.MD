@@ -1,17 +1,20 @@
-# Month 1 Implementation Plan — JSON Tool
+# Month 1 Implementation Plan — JSON Tool (v2)
+
+> **Changes from v1:** NDJSON support added in W3 · JSONPath/jq query language in M1 · table view added in W4 · SEO landings cut from 8 to 4 with deep content · cold-email experiment reframed to test persona overlap · share-links privacy UX fixed · `?url=` cap aligned with hero claim · KV value limits flagged · launch channel sequence expanded beyond HN · benchmark video budget doubled · PWA in Done criteria · email-capture value exchange designed · trademark search added to brand decision · benchmark methodology to be published.
 
 ## Context
 
 Building the **free public JSON tool** that serves as the acquisition funnel for a paid SaaS ("reliability + observability for structured data," LLM JSON reliability as the entry wedge). 90-day company goal is 10 paying teams; Month 1's goal is a live public URL with the **huge-JSON wedge feature** working end-to-end and SEO routes indexed.
 
-Project lives at `/Users/fazeel/Documents/json-tool/` (local; this remote planning session has no access to it). Currently contains only `PROJECT_PLAN.md` and `RESEARCH_PLAN.md`. No code, no git repo yet.
+**Three locked differentiators:**
 
-**Three locked differentiators (from PROJECT_PLAN.md):**
-1. Huge-JSON handling — *Month 1 wedge*
+1. Huge-JSON handling (including NDJSON) — *Month 1 wedge*
 2. Semantic diff — Month 2
 3. AI grounded explanations + schema inference — schema inference Month 1, AI Month 2
 
-**Out of scope for Month 1:** auth/accounts, paid tier UI, semantic diff, AI explanations, NL → jq, native desktop, VSCode extension, real-time collab, mobile optimization. Week 4 slack goes to perf grinding, not features.
+**Open strategic question (must resolve in M1):** the free-tool wedge (huge JSON, serving data engineers/SREs) and the paid-tier wedge (LLM JSON reliability, serving AI engineers) target different personas. The cold-email experiment in W1 is now scoped to measure overlap; if it's under 10%, the funnel needs rethinking before M2. This is the single load-bearing risk in the 90-day plan.
+
+**Out of scope for Month 1:** auth/accounts, paid tier UI, semantic diff, AI explanations, NL→jq, native desktop, VSCode extension, real-time collab, mobile optimization. Week 4 slack goes to perf grinding, not features.
 
 ---
 
@@ -42,13 +45,15 @@ flowchart LR
     SW -->|deep: 2nd stream pass| Hits2[hits w/ progress bar]
 ```
 
-**Memory rule — never violate:** never materialize a 500MB JSON to a single JS object. Spine + offset index only. Deeper nodes are `{ kind: 'lazy', byteStart, byteEnd, kindHint, childCountEstimate }` stubs in the flat list until the user expands them.
+**Memory rule — never violate:** never materialize a 500MB JSON to a single JS object. Spine + offset index only.
 
 **Index size budget:** index stays <50MB on 1GB input by capping at depth 3 and array-offset granularity (every Nth element for huge arrays).
 
-**Offset safety:** byte offsets stored in the index must land on structural token boundaries (between tokens), never inside a string or number. `Blob.slice` is byte-indexed; a mid-character UTF-8 cut produces invalid input for `JSON.parse`. Snap offsets to nearest structural boundary at index-build time, not lazy-expand time. The Day-1 spike (Week 1 Mon) tests this explicitly.
+**Offset safety:** byte offsets stored in the index must land on structural token boundaries (between tokens), never inside a string or number. Snap offsets to nearest structural boundary at index-build time.
 
-**Known future scaling risk — `FlatNode[]` memory growth:** the flat array indexed by `react-window` is a single linear buffer. If a user expands an array with 5M+ children, the array balloons even though the underlying JSON stays in the worker. Not a Month 1 problem (cap visible-expanded children at ~100k with a "show more" stub), but Month 2+ likely needs segmented flat buffers, windowed materialization, and eviction. Track in `Out of scope` until profiling shows it as the actual ceiling.
+**NDJSON detection:** on file load, sample first 4KB. If content matches `^(\{.*\}|\[.*\]|".*"|[\d\-tfn])\n` repeated, treat as NDJSON. Build line-offset index (byte position of each newline) instead of structural offset index. Each line is a separate document; tree view paginates by line range (default 1000 lines/page). Lazy expand a single line = `Blob.slice(lineStart, lineEnd) → JSON.parse`. Same architecture, simpler subproblem.
+
+**Known future scaling risk — `FlatNode[]` memory growth:** the flat array indexed by `react-window` is a single linear buffer. Cap visible-expanded children at ~100k with a "show more" stub. Month 2+ likely needs segmented flat buffers.
 
 ---
 
@@ -56,18 +61,14 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    W1[Week 1<br/>Scaffold + Monaco + naive tree<br/>+ 8 SEO routes + CF Pages live]
+    W1[Week 1<br/>Scaffold + Monaco + naive tree<br/>+ 4 SEO routes + CF Pages live]
     W2[Week 2<br/>Flatten + react-window<br/>+ search + keyboard nav]
-    W3[Week 3<br/>Worker + stream-json<br/>+ chunkedTree + lazy expand]
-    W4[Week 4<br/>Schema infer + repair UX<br/>+ share links + launch]
+    W3[Week 3<br/>Worker + stream-json<br/>+ chunkedTree + lazy expand<br/>+ NDJSON mode]
+    W4[Week 4<br/>Schema infer + repair UX<br/>+ table view + JSONPath/jq<br/>+ share links + launch]
     W1 --> W2 --> W3 --> W4
-    W1 -.Day-1 spike.-> S{stream-json<br/>+ Vite worker?}
-    S -->|works| W3
-    S -->|fights| Fallback[switch to<br/>@streamparser/json]
-    Fallback --> W3
 ```
 
-Day-1 spike on `stream-json` in a Vite worker is non-negotiable — finding out it fights the bundler in Week 3 costs the wedge.
+Day-1 spike already done (2026-05-14): `@streamparser/json` selected.
 
 ---
 
@@ -75,31 +76,32 @@ Day-1 spike on `stream-json` in a Vite worker is non-negotiable — finding out 
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Framework | **Vite + React 18 + TS** | Better workers/WASM/Monaco story than Next.js; SEO via SSG |
-| Routing | **react-router v6 (data router)** | Strong SSG ecosystem; loaders ready for Month 3 |
+| Framework | **Vite + React 18 + TS** | Better workers/WASM/Monaco story than Next.js |
+| Routing | **react-router v6 (data router)** | Strong SSG ecosystem |
 | SSG | **`vite-react-ssg`** | Prerenders SEO routes to static HTML at build time |
 | Styling | **Tailwind + shadcn/ui + Radix** | Matches existing repo patterns |
 | State | **Zustand + Immer** | Lightweight; workers can subscribe |
 | Editor | **Monaco** via `@monaco-editor/react` | Lazy-loaded; not on SEO routes |
-| Virtualization | **react-window `FixedSizeList`** over flat array | Simpler than VariableSizeList; rows fixed at 24px |
-| Streaming parser | **`stream-json`** in web worker | Battle-tested; fallback `@streamparser/json` |
+| Virtualization | **react-window `FixedSizeList`** over flat array | Simpler than VariableSizeList |
+| Streaming parser | **`@streamparser/json`** in web worker | Locked via Day-1 spike (offset capture via `Tokenizer.onToken`) |
 | JSON repair | **`jsonrepair`** | Best-in-class OSS; wrap with diff UX |
+| Query langs | **`jsonpath-plus`** + **`jq-wasm`** | JSONPath for casual queries, jq-wasm for power users |
 | Worker RPC | **`comlink`** | Ergonomic boundary |
 | PM / Node | **npm** / **20 LTS (.nvmrc)** | Matches user's other repos |
-| Hosting | **Cloudflare Pages** + Workers/KV (share links only) | Bandwidth economics for sample files |
-| Analytics | **Plausible** | Privacy-friendly, matches "100% client-side" pitch |
+| Hosting | **Cloudflare Pages** + Workers/KV/R2 | KV for ≤4MB shares; R2 for larger |
+| Analytics | **Plausible** | Privacy-friendly |
 | Tests | **Vitest + Playwright** (smoke only) | Unit for pure logic, ~2 E2E days max |
-| Backend Month 1 | **None** beyond CF Worker + KV for share links | Postgres/Bun deferred to Month 2 |
+| Backend Month 1 | **CF Worker + KV + R2** for share links and email capture only | Postgres/Bun deferred to Month 2 |
 
-**Locked defaults for deferred questions** (push back if any are wrong):
+**Locked defaults:**
 
-- Repo **private** Month 1; flip public on launch day for clean commit history. OSS-the-tool decision deferred to Month 4 (when SDK ships).
-- **Telemetry:** Plausible aggregates only. JSON content never leaves the browser. Events: page view, sample-load, parse-success, parse-error, repair-used, share-created, large-file-loaded-{50,200,500}MB.
+- Repo **private** Month 1; flip public on launch day.
+- **Telemetry:** Plausible aggregates only. JSON content never leaves the browser *unless the user clicks Share* — see "Share UX" below.
 - Browser floor: Chrome/Edge/Firefox/Safari latest-2.
-- Auth: deferred to Month 2; Month 1 is email capture only.
-- Name + domain: placeholder `jsontool.pages.dev` until **end of Week 2** — pick from 3 candidates by Fri W2 (PayloadIQ is the default from the PDF research). Register domain + GitHub org + Twitter handle same day. After W2, this blocks the OG image, HN draft, and benchmark video.
+- Auth: deferred to Month 2; Month 1 is email capture only with **specific value exchange** (see W4 Thursday).
+- Name + domain: 3 candidates by **Mon W2**, trademark/USPTO/npm/GitHub/Twitter/.com checks done by **Wed W2**, decision and registration by **Fri W2**. PayloadIQ is the default but requires availability confirmation across all surfaces.
 - Launch: soft-committed to end of Week 4.
-- Customer discovery: 5 calls in Month 1 (not 15). Build wins on conflict.
+- Customer discovery: 5 calls in Month 1.
 
 ---
 
@@ -108,50 +110,56 @@ Day-1 spike on `stream-json` in a Vite worker is non-negotiable — finding out 
 ```
 /Users/fazeel/Documents/json-tool/
 ├── public/
-│   ├── samples/                  # small canned JSON fixtures
-│   ├── og/                       # OG images per landing
-│   ├── _headers                  # CF Pages: strict CSP, security headers
+│   ├── samples/                       # small canned JSON + NDJSON fixtures
+│   ├── og/                            # OG images per landing
+│   ├── _headers                       # CF Pages: strict CSP, security headers
 │   └── robots.txt
 ├── src/
 │   ├── main.tsx
-│   ├── routes.tsx                # shared by client + SSG
-│   ├── App.tsx                   # layout shell
+│   ├── routes.tsx                     # shared by client + SSG
+│   ├── App.tsx                        # layout shell
 │   ├── pages/
-│   │   ├── Home.tsx              # "/" — the tool itself
+│   │   ├── Home.tsx                   # "/" — the tool itself
 │   │   └── seo/
-│   │       ├── JsonViewer.tsx        # /json-viewer
-│   │       ├── JsonFormatter.tsx     # /json-formatter
-│   │       ├── JsonValidator.tsx     # /json-validator
-│   │       ├── LargeJsonViewer.tsx   # /large-json-viewer  ← wedge SEO
-│   │       ├── JsonToTypescript.tsx  # /json-to-typescript
-│   │       ├── JsonToZod.tsx         # /json-to-zod
-│   │       └── JsonRepair.tsx        # /json-repair
+│   │       ├── JsonViewer.tsx         # /json-viewer (broad term)
+│   │       ├── LargeJsonViewer.tsx    # /large-json-viewer ← wedge SEO
+│   │       ├── NdjsonViewer.tsx       # /ndjson-viewer ← wedge SEO #2
+│   │       └── JsonRepair.tsx         # /json-repair (LLM-adjacent)
 │   ├── components/
 │   │   ├── editor/{MonacoPane,EditorToolbar}.tsx
 │   │   ├── tree/{TreeView,TreeRow,ValuePreview,PathBreadcrumb,SearchBar}.tsx
+│   │   ├── table/{TableView,TableRow}.tsx                    # NEW
+│   │   ├── query/{QueryBar,QueryResults}.tsx                 # NEW (JSONPath/jq)
+│   │   ├── share/{ShareModal,PrivacyDisclosure}.tsx          # NEW (explicit consent)
 │   │   ├── layout/{AppShell,ResizablePanes,TopBar}.tsx
 │   │   ├── seo/LandingTemplate.tsx
-│   │   └── ui/                       # shadcn output
+│   │   └── ui/                        # shadcn output
 │   ├── workers/
-│   │   ├── parser.worker.ts          # streaming parse + index build
+│   │   ├── parser.worker.ts           # streaming parse + index build + NDJSON detection
 │   │   ├── search.worker.ts
+│   │   ├── query.worker.ts            # NEW: JSONPath + jq-wasm
 │   │   └── schema.worker.ts
 │   ├── lib/
-│   │   ├── json/{flattenTree,chunkedTree,pathing,format,inferSchema}.ts
-│   │   ├── net/fetchUrl.ts           # URL fetch with size/type/redirect caps
-│   │   ├── workers/client.ts         # Comlink wrapper
+│   │   ├── json/{flattenTree,chunkedTree,pathing,format,inferSchema,ndjson}.ts
+│   │   ├── net/fetchUrl.ts
+│   │   ├── workers/client.ts
 │   │   └── analytics.ts
 │   ├── state/{documentStore,viewStore,prefsStore}.ts
 │   ├── styles/globals.css
-│   └── types/json.ts                 # JsonValue, FlatNode, ChunkedNode, LazyStub
+│   └── types/json.ts
 ├── tests/
-│   ├── unit/                         # Vitest
-│   └── e2e/                          # Playwright smoke
+│   ├── unit/                          # Vitest
+│   └── e2e/                           # Playwright smoke
 ├── benchmarks/
-│   ├── README.md
-│   ├── corpus/                       # gitignored
-│   ├── generate.mjs                  # synth fixtures (see "Benchmark fixture shapes" in W3)
-│   └── run.mjs                       # Playwright-driven benchmark
+│   ├── README.md                      # methodology, hardware, browser versions
+│   ├── corpus/                        # gitignored
+│   ├── generate.mjs                   # synth fixtures (incl. NDJSON variants)
+│   └── run.mjs
+├── content/                           # NEW: SEO landing copy (MDX-free, plain MD imported)
+│   ├── json-viewer.md
+│   ├── large-json-viewer.md
+│   ├── ndjson-viewer.md
+│   └── json-repair.md
 ├── .nvmrc · .env.example · .prettierrc · eslint.config.js
 ├── vite.config.ts · tsconfig.json · tailwind.config.ts · postcss.config.js
 ├── vitest.config.ts · playwright.config.ts
@@ -160,32 +168,29 @@ Day-1 spike on `stream-json` in a Vite worker is non-negotiable — finding out 
 
 ---
 
-## Day-0 setup (order matters)
-
-Vite's scaffolder refuses a non-empty directory, so the steps below are intentionally sequenced:
+## Day-0 setup (unchanged from v1, plus query libs)
 
 ```bash
 cd /Users/fazeel/Documents/json-tool
 
-# 1. Vite first — scaffolds package.json, tsconfig, src/, index.html
 npm create vite@latest . -- --template react-ts
 echo "20" > .nvmrc
-
-# 2. git init AFTER scaffold so the initial commit captures the template
 git init && git add -A && git commit -m "chore: initial vite scaffold"
 
-# 3. Core runtime deps
+# Core runtime deps
 npm i react-router-dom@6 zustand@4 immer
 npm i monaco-editor @monaco-editor/react
 npm i react-window @types/react-window
-npm i jsonrepair stream-json @streamparser/json comlink
+npm i jsonrepair @streamparser/json comlink
+npm i jsonpath-plus jq-wasm                                 # NEW
 npm i clsx tailwind-merge class-variance-authority lucide-react
 npm i @radix-ui/react-dialog @radix-ui/react-dropdown-menu \
       @radix-ui/react-tooltip @radix-ui/react-tabs \
-      @radix-ui/react-toast @radix-ui/react-slot
+      @radix-ui/react-toast @radix-ui/react-slot \
+      @radix-ui/react-alert-dialog                          # NEW (share consent)
 npm i react-helmet-async react-resizable-panels
 
-# 4. Dev deps
+# Dev deps
 npm i -D tailwindcss postcss autoprefixer @tailwindcss/typography
 npm i -D vite-react-ssg vite-plugin-pwa
 npm i -D vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom
@@ -194,199 +199,212 @@ npm i -D eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin \
          eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-react-refresh
 npm i -D prettier prettier-plugin-tailwindcss @types/node
 
-# 5. Tailwind, then shadcn (shadcn requires Tailwind configured)
 npx tailwindcss init -p
 npx shadcn@latest init
-# add: button card input textarea tabs dialog dropdown-menu tooltip toast \
-#      separator scroll-area badge skeleton sheet command
+# add: button card input textarea tabs dialog alert-dialog dropdown-menu \
+#      tooltip toast separator scroll-area badge skeleton sheet command table
 ```
 
-**`vite.config.ts` essentials (4 known gotchas):**
-
-1. `worker: { format: 'es' }` — required for ES-module workers; without it, Comlink + stream-json bundling silently breaks in production.
-2. Manual chunk Monaco: `build.rollupOptions.output.manualChunks: { monaco: ['monaco-editor'] }`. Otherwise it lands in the main chunk and tanks first paint on SEO routes.
-3. `optimizeDeps.exclude: ['stream-json']` — pre-bundling this library mangles its CJS entrypoints. Load only inside the worker via `import` from the worker file.
-4. `@monaco-editor/react` + `loader.config({ monaco })` so we use the **bundled** monaco-editor, not the CDN default. CDN default fails offline and adds an external dependency.
-
-**`.env.example`:**
-```
-VITE_APP_URL=http://localhost:5173
-VITE_PLAUSIBLE_DOMAIN=
-VITE_BENCHMARK_MODE=0
-```
-
-**GitHub + CI:**
-- Single `.github/workflows/ci.yml`: `tsc --noEmit && eslint && vitest run && playwright test --project=chromium-smoke`. Benchmarks run locally/nightly, not in CI (flaky on shared runners).
-- Conventional Commits (`feat:`, `fix:`, `perf:`).
+**`vite.config.ts` gotchas:** unchanged from v1. `worker: { format: 'es' }`, manual-chunk Monaco, `optimizeDeps.exclude: ['@streamparser/json']`, bundled Monaco via `loader.config({ monaco })`.
 
 ---
 
 ## Week 1 — Foundation + first deploy
 
-Target: **live public URL by Friday.**
+Target: **live public URL by Friday** with 4 deep SEO routes (not 8 thin ones).
 
-| Day | Task | Files |
-|---|---|---|
-| Mon | Scaffold + deps. Tailwind + shadcn working. `AppShell` + `ResizablePanes`. **Day-1 spike (4hr budget):** (a) `stream-json` in a Vite worker on a 50MB fixture; (b) emit `{event, byteStart, byteEnd}` per token via a counting `TransformStream`; (c) `Blob.slice(start, end) → JSON.parse` round-trips equal to the original value; (d) UTF-8 fixture with emoji/CJK at known offsets — slice boundaries never land mid-character. If any of (a–d) fails, switch to `@streamparser/json` and repeat *today*. Decision before EOD. | `App.tsx`, `components/layout/*`, `spikes/parser-offsets.ts` |
-| Tue | Monaco pane: paste / drag-drop / `?url=` load handlers; format / minify / sort-keys buttons; validation feedback (line + col). **`?url=` constraints:** client-side `fetch` only (no proxy); reject `Content-Length > 100MB`; allow only `application/json` and `text/plain`; max 3 redirects; 30s abort; show source URL to user before parsing. | `components/editor/MonacoPane.tsx`, `EditorToolbar.tsx`, `lib/json/format.ts`, `lib/net/fetchUrl.ts` |
-| Wed | Naive (non-virtualized) tree view; expand/collapse; JSON-path click-to-copy; type badges. Cap at first 5k nodes with truncated banner — virtualization is Week 2. | `components/tree/*`, `lib/json/pathing.ts` |
-| Thu | Routing: all 8 SEO routes stubbed via `LandingTemplate`; `vite-react-ssg` prerender works locally (verify `curl` on each route shows unique `<title>` in built HTML); CF Pages project connected to GitHub. | `routes.tsx`, `pages/seo/*`, `components/seo/LandingTemplate.tsx` |
-| Fri | Deploy to CF Pages; Plausible installed; OG basics; `robots.txt`, `sitemap.xml` generated at build. **`public/_headers` with strict CSP** (`default-src 'self'`; only Plausible allowed for `script-src` / `connect-src`); "100% client-side" badge in topbar with tooltip linking to the CSP. **Public URL live.** | `vite.config.ts` SSG wiring, `public/_headers`, deploy |
+| Day | Task |
+|---|---|
+| Mon | Scaffold + deps done. Tailwind + shadcn working. `AppShell` + `ResizablePanes`. Day-1 spike already complete — parser locked. **Start parallel ops:** draft cold-email templates targeting both personas; queue 50 recipients for W1 Fri send. |
+| Tue | Monaco pane: paste / drag-drop / `?url=` load handlers; format/minify/sort-keys; validation feedback. **`?url=` constraints: 500MB cap (matches hero), JSON + JSON Lines content types, max 3 redirects, 30s abort.** |
+| Wed | Naive (non-virtualized) tree view; expand/collapse; JSON-path click-to-copy; type badges. Cap at 5k nodes with truncated banner. |
+| Thu | Routing: **4 SEO routes stubbed** (`/`, `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`, `/json-repair`); `vite-react-ssg` prerender works locally; CF Pages project connected. |
+| Fri | Deploy to CF Pages; Plausible installed; OG basics; `robots.txt`, `sitemap.xml`; `public/_headers` with strict CSP; "100% client-side" badge. Public URL live. *(Outreach moved to W2-Fri — 2026-05-18 defer decision; see project_overview memory.)* |
 
 **Week 1 acceptance:**
+
 - Paste 1MB JSON → formatted → tree expands.
 - Cold-load <1s for `/` and SEO routes.
-- All 8 SEO routes return 200 with unique `<title>` + `<meta description>` in prerendered HTML.
+- All 4 SEO routes return 200 with unique `<title>` + `<meta description>`.
+- (Outreach deferred to W2-Fri; no cold-email criterion this week.)
 
 ---
 
-## Week 2 — Tree view + virtualization
+## Week 2 — Tree view + virtualization + brand decision
 
-**Architectural decision (load-bearing):** flat 1-D `FlatNode[]` indexed by visible position; expanded-set lives as `Set<string>` of JSON pointers in `viewStore`. Flattening is O(visible nodes), called only when expansion state changes. Row height fixed at 24px; long values truncated in-row, full value on click/hover.
+| Day | Task |
+|---|---|
+| Mon | `flattenTree.ts` + `viewStore`; switch tree to flat array. **Brand:** finalize 3 candidate names. |
+| Tue | Wire `FixedSizeList`; render `TreeRow`. Test on 1MB / 100k-node JSON. **Brand:** start trademark/availability checks across all 3 (USPTO, EU TM, .com, .dev, GitHub org, npm scope, Twitter handle). **Customer call #1.** |
+| Wed | Search bar: filter by key/value; jump-to-match; highlight. **Brand:** decision based on availability matrix. **Evening: recipient-list research (2-3h, prep for W2-Fri batch 1 send).** W2-Thu morning is overflow if Wed evening overruns. |
+| Thu | Keyboard nav (arrows, enter, /); breadcrumb; value detail drawer. **Brand:** register domain, GitHub org, npm scope, Twitter handle (same day). **Customer call #2.** |
+| Fri | Perf pass with React Profiler. `React.memo` on `TreeRow`. 60fps on 100k visible nodes. Verify in `vite preview`, not `vite dev`. **Send cold-email batch 1 (25 recipients)** — pushed here from W1-Fri per 2026-05-18 defer decision. Batch 2 + batch-1 reply review move to W3-Fri. |
 
-```ts
-// src/types/json.ts
-type FlatNode = {
-  id: number;
-  path: string;                  // JSON pointer "/foo/0/bar"
-  depth: number;
-  key: string | number | null;
-  kind: 'object'|'array'|'string'|'number'|'bool'|'null'|'lazy';
-  childCount?: number;           // exact for materialized, estimate for lazy
-  preview: string;               // truncated value or "{ 3 keys }"
-  isExpanded: boolean;
-  parentId: number | null;
-  lazy?: { byteStart: number; byteEnd: number; kindHint: 'object'|'array' };
-};
-```
+**Week 2 acceptance:**
 
-| Day | Task | Files |
-|---|---|---|
-| Mon | `flattenTree.ts` + `viewStore`; switch tree to flat array | `lib/json/flattenTree.ts`, `state/viewStore.ts` |
-| Tue | Wire `FixedSizeList`; render `TreeRow`. Test on synthesized 1MB / 100k-node JSON | `components/tree/TreeView.tsx`, `TreeRow.tsx` |
-| Wed | Search bar: filter by key/value; jump-to-match; highlight | `components/tree/SearchBar.tsx` |
-| Thu | Keyboard nav (arrows, enter, /); breadcrumb; value detail drawer | `components/tree/PathBreadcrumb.tsx`, `ValuePreview.tsx` |
-| Fri | Perf pass with React Profiler. `React.memo` on `TreeRow` with shallow path+expansion check. Hit 60fps on 100k visible nodes. **Verify in `vite preview`, not just `vite dev`** — StrictMode double-renders mask perf in dev. | tuning |
-
-**Week 2 acceptance:** 10MB JSON with 200k nodes (when fully expanded) scrolls at 60fps; search returns <100ms on spine; keyboard nav round-trips without focus jank.
+- 10MB JSON with 200k nodes scrolls at 60fps.
+- Search <100ms on spine.
+- Brand registered across all surfaces.
+- 2 customer calls done; cold-email batch 1 dispatched W2-Fri (replies expected W3).
 
 ---
 
-## Week 3 — Huge-JSON wedge (streaming + index)
+## Week 3 — Huge-JSON wedge (streaming + index + NDJSON)
 
-The moat. Architecture is the mermaid above. Concrete behavior:
+**NEW this week: NDJSON mode is in-scope as a Tier-2 priority.** Reasoning: most "huge JSON in the wild" is actually newline-delimited (logs, LLM training data, MongoDB/Stripe exports). Without it, HN commenters will trash the launch. Implementation is simpler than nested-JSON streaming because each line is independently parseable.
 
-1. Stream bytes from `File.stream()` into the worker. Never load file as a single ArrayBuffer.
-2. Worker pipes through `stream-json`. Emit events: `startObject`, `key`, `value`, `endObject`, etc. with **byte offsets** (stream-json provides these via its filter pipeline or we wrap with a counting transform).
-3. Materialize the spine (top 3 levels) fully. Deeper subtrees become `lazy` FlatNodes.
-4. Build `Map<path, {byteStart, byteEnd}>` for spine + every Nth array element (configurable; default N=100 for arrays >10k items).
-5. On lazy-expand: `Blob.slice(byteStart, byteEnd)` → `text()` → `JSON.parse` → flatten subtree → splice into main flat array via Comlink.
-6. Deep search ("value contains X") = streaming second pass with progress bar; emits hits incrementally.
-
-| Day | Task | Files |
-|---|---|---|
-| Mon | Worker plumbing with Comlink; `parser.worker.ts` streams a File and emits offset-tagged events; smoke test on 50MB | `workers/parser.worker.ts`, `lib/workers/client.ts` |
-| Tue | In-worker `chunkedTree` store: build spine + offset index from stream events | `lib/json/chunkedTree.ts` |
-| Wed | Lazy expand: tree row → worker fetches slice → returns subtree FlatNodes; splice into flat array | TreeView wiring, worker RPC |
-| Thu | Search slow path with progress; memory monitoring HUD (toggle via `?debug=1`, reads `performance.memory` when available) | `workers/search.worker.ts` |
-| Fri | Benchmark on the fixture matrix below (not on a single synthesized array of objects — competitors win on synthetic JSON nobody has). Tune. Fix worst regressions. | `benchmarks/run.mjs` |
+| Day | Task |
+|---|---|
+| Mon | Worker plumbing with Comlink; `parser.worker.ts` streams a File and emits offset-tagged events via `Tokenizer.onToken`; smoke test on 50MB. **Customer call #3.** |
+| Tue | In-worker `chunkedTree` store: build spine + offset index from stream events. **Cold-email batch 2 review.** |
+| Wed | Lazy expand: tree row → worker fetches slice → returns subtree FlatNodes; splice into flat array. |
+| Thu | **NDJSON detection + line-paginated mode** (`lib/json/ndjson.ts`): sample first 4KB on load, detect format, build line-offset index, render line-by-line. Lazy expand individual lines on click. Test on 200MB NDJSON fixture. |
+| Fri | Search slow path with progress; memory monitoring HUD (`?debug=1`). Benchmark on fixture matrix. **Customer call #4. Final cold-email tally: reply rate? overlap rate? Decision: A-narrative or B-narrative for launch.** |
 
 **Benchmark fixture shapes (`generate.mjs` produces all of these):**
 
 | Shape | Size targets | Why |
 |---|---|---|
-| `flat-array.json` | 50 / 200 / 500MB | Baseline: array of similar objects (log-line shape). Easiest case. |
-| `deep-nested.json` | 5 / 20MB | 1000+ levels deep. Tree-recursion / stack-limit stressor. |
-| `wide-object.json` | 50 / 200MB | Single object with 1M+ keys. Tests key-search / Map performance. |
-| `giant-array.json` | 200 / 500MB | Array with 10M+ small elements. Tests virtualization + offset-index granularity. |
-| `unicode-heavy.json` | 50MB | Emoji + CJK + escape sequences at known offsets. UTF-8 slice safety. |
-| `long-strings.json` | 100MB | A few values that are individually 50MB+. Tests "expand single string" UX. |
-| `telemetry.json` | 200MB | Realistic mixed shape: timestamps, IDs, nested events, nulls, sparse fields. Closest to user reality. |
-| `pathological.json` | 50MB | Repeated keys (RFC-allowed), trailing-comma-adjacent, escaped quotes, BOM. Robustness. |
+| `flat-array.json` | 50 / 200 / 500MB | Baseline; easiest case |
+| `deep-nested.json` | 5 / 20MB | Stack-recursion stressor |
+| `wide-object.json` | 50 / 200MB | 1M+ keys; key-search stressor |
+| `giant-array.json` | 200 / 500MB | 10M+ small elements |
+| `unicode-heavy.json` | 50MB | UTF-8 slice safety |
+| `long-strings.json` | 100MB | Individual 50MB+ values |
+| `telemetry.json` | 200MB | Realistic mixed shape |
+| `pathological.json` | 50MB | Robustness edge cases |
+| `telemetry.ndjson` | 200 / 500MB | **NEW: realistic NDJSON logs** |
+| `llm-training.ndjson` | 100MB | **NEW: ML dataset shape (`{"prompt": …, "completion": …}` per line)** |
 
-Competitor benchmark video uses `telemetry.json` (most realistic) + `flat-array.json` (most flattering) so head-to-head numbers are honest.
-
-**Realistic ceilings — be honest:**
+**Realistic ceilings:**
 
 | Target | Probability | Public claim |
 |---|---|---|
 | 50MB instant | 95% | Yes |
-| 200MB smooth | 80% | Yes |
-| 500MB usable (indexed, progress bar) | 55–65% | **Lead the launch with this** |
-| 1GB streamed | 20–30% | **Internal stretch only — never in public copy, OG image, HN post, or SEO landings.** HN commenters will test pathological GB files to break it; don't give them the target. |
+| 200MB smooth (JSON or NDJSON) | 80% | Yes |
+| 500MB usable (indexed, progress bar) | 55-65% | **Lead with this** |
+| 1GB streamed | 20-30% | Internal stretch only |
 
-Launch narrative: **"500MB JSON in your browser. In 30 seconds. Without crashing."**
+**Public-claim ceiling:** 500MB. All marketing surfaces stop at 500MB.
 
-**Public-claim ceiling:** 500MB. All marketing surfaces (`/large-json-viewer` hero, OG image, HN title, benchmark video voiceover, screenshot captions) stop at 500MB. 1GB performance is internal benchmarking only.
+**Pre-bake both narratives by Fri W3:**
 
-**Pre-bake both narratives by Fri W3** (no panic drafting on launch day):
-- **A-narrative (500MB hits):** "500MB JSON in your browser, in 30s, without crashing." HN post, OG image, benchmark video.
-- **B-narrative (500MB only indexed-mode):** "200MB smooth; 500MB indexed-and-searchable." Pivot decision is end-of-W3, based on benchmark numbers — not launch day.
+- **A-narrative (500MB hits):** "500MB JSON or NDJSON in your browser, in 30s, without crashing."
+- **B-narrative (only indexed-mode):** "200MB smooth; 500MB indexed-and-searchable."
 
-**Cut order if W3 slips** (in order of removal, not addition):
-1. **Schema inference Tab in the UI** — keep the worker code; just don't surface it. AI explanations are M2 anyway; Zod export is not the launch hook.
-2. **JSON-repair diff UX** — ship `jsonrepair` as a one-click button without the "we fixed X / Y / Z" diff view.
-3. **Do NOT cut:** share links (HN traffic depends on it), benchmark video (the launch hook itself), Lighthouse 90+ on `/large-json-viewer`.
+**Cut order if W3 slips (unchanged):**
+
+1. Schema inference tab in UI (keep worker code; don't surface)
+2. JSON-repair diff UX (ship `jsonrepair` as one-click button)
+3. **Do NOT cut:** NDJSON support, share links, benchmark video, Lighthouse 90+ on `/large-json-viewer`.
 
 ---
 
-## Week 4 — Schema/repair/share + launch
+## Week 4 — Schema / repair / share / table / query + launch
 
-| Day | Task | Files |
+| Day | Task |
+|---|---|
+| Mon | Schema inference (`schema.worker.ts`): walk spine + reservoir; emit JSON Schema / TS / Zod. **Bounded scope:** primitives, arrays, object structure, nullable. **Out:** unions, enums, format detection. **Customer call #5.** |
+| Tue | **Benchmark video recording (Day 1 of 2).** Record side-by-side against jsonhero / stack.hu / jsoncrack / jsoneditoronline on `telemetry.json` (200MB) and `flat-array.json` (500MB). Capture crash moments. Also record on NDJSON fixture vs. Dadroit V Web. |
+| Wed | **Benchmark video recording (Day 2 of 2): voiceover + edit.** In parallel: **JSON repair UX** (wire `jsonrepair`; diff view); **table view** (read-only, top-level array, sortable columns, ~half day); **JSONPath/jq query bar** (`jsonpath-plus` + `jq-wasm` in worker; results render as flat tree). |
+| Thu | **Email capture with specific value exchange:** "Get the JSON-to-Schema CLI (free)" — generate a small npx package on signup, email contains the install command. **Share links:** gzipped JSON, KV for ≤4MB source / R2 for larger, with **explicit consent modal** ("Sharing uploads this JSON to our servers. Continue?") and **dimmed CSP badge while shared link is active**. Plausible custom events firing. |
+| Fri | **SEO landing copy:** 4 routes × ~1,500 words each = ~6,000 words original content. Hero, "open with your file", benchmark table with screenshots, three-differentiator sections, when-to-use-vs-alternatives section per route. **Launch prep:** finalize HN post; Show HN dry run with 2 friends; **publish benchmark methodology page** (hardware, browser version, fixtures linked, repro steps); **pre-write a11y response** for HN comments; **queue Reddit/Lobsters/Twitter/newsletter pitches**. Flip repo public. Ship. |
+
+**Launch channel sequence (not just HN):**
+
+| Time | Channel | Notes |
 |---|---|---|
-| Mon | Schema inference (`schema.worker.ts`): walk spine + reservoir; emit JSON Schema / TS interface / Zod. Roll our own — don't pull `quicktype` (~1MB). **Bounded scope (in-scope):** primitive types, arrays, object structure, nullable detection. **Explicitly out (Month 2+):** union inference, enum inference, recursive merging across siblings, format detection (date/email/UUID), reference detection. Schema spirals fast — keep the surface small or it eats W4. | `workers/schema.worker.ts`, `lib/json/inferSchema.ts` |
-| Tue | JSON repair UX: wire `jsonrepair`; show "we fixed X / Y / Z" diff before applying | `components/editor/EditorToolbar.tsx` |
-| Wed | SEO landing copy: hero, "open with your file", benchmark table with screenshots, three-differentiator sections. TSX with prose Tailwind, no MDX. | `pages/seo/*` |
-| Thu | Email capture (CF Worker → KV); shareable links (Worker + KV; gzipped JSON ≤1MB; ~30 LoC); Plausible custom events firing | new CF Worker, `lib/analytics.ts` |
-| Fri | **Launch prep:** record benchmark video against jsonhero / stack.hu / jsoncrack / jsoneditoronline on the same fixture; draft HN post; Show HN dry run with 2 friends; polish; ship. Flip repo public. | recordings, post drafts |
-
-**Budget rule:** treat competitor benchmark recording as a full-day task. Rushing it the night before kills the hero claim.
+| T+0 (Tue 9 AM PT) | HN Show HN | Best slot for dev audience |
+| T+2h | r/dataengineering | Best fit for the 500MB / NDJSON demo |
+| T+4h | r/webdev + r/programming | Broader dev audience |
+| T+6h | Lobsters | Tighter dev crowd; lower volume, higher quality discussion |
+| T+24h | Twitter | Tag relevant accounts: @swyx, @t3dotgg, @jaredpalmer, etc. |
+| T+48h | Newsletter pitches | TLDR, Console.dev, Bytes, JavaScript Weekly — submit via their forms |
+| T+1w | Dev.to writeup | "How we made 500MB JSON viewable in the browser" technical post |
 
 ---
 
-## Parallel ops (run alongside build — not optional)
-
-These are off-keyboard tasks that validate the strategic bet. Skipping them means hitting M3 with no validation. Block them into the calendar; they slip silently otherwise.
+## Parallel ops (running alongside build)
 
 | Track | When | Budget | What |
 |---|---|---|---|
-| **Customer calls** | Tue + Thu afternoons, W2–W3 | 5 calls (not 15) | Recruiting takes 2 weeks lead time — draft cold-email + Twitter DM templates by Fri W1. Outreach starts W1, not W3. Target 5 booked, accept 3, don't slip the launch. |
-| **Conversion experiment (cold email)** | Start W1, results by end W2 | $200 + 50 messages | DM/email founders of recent YC batches with AI products. Pitch: "monitoring for LLM JSON outputs, 20-min call?" Track reply rate + "would pay" rate. Tells us whether SDK demand exists *independently* of free-tool conversion. <5% reply rate or <2/10 "would pay" → wedge needs rethink, in Week 2, not Month 3. |
-| **Native structured output disruption test** | W2 evening, 2hr | 5 schemas, GPT-4o strict mode | Force semantic-not-syntactic failures (ambiguous enums, edge cases). Document what slips through. If >50% of failures are semantic/drift → wedge holds. If <20% → pivot toward API-payload-drift angle now. |
-| **Launch narrative A/B drafts** | Fri W3 | half-day | Both HN drafts written, OG images for both, video script for both. Pivot decision based on W3 benchmark numbers, not launch-day panic. |
-| **`vite preview` perf check** | Every Friday | 30 min | StrictMode in `vite dev` masks regressions. Catching them weekly avoids launch-day surprises. |
+| **Customer calls** | W2 Tue + Thu, W3 Mon + Fri, W4 Mon | 5 calls | Recruiting from W1. **Ask explicitly about persona overlap:** do you work with files >100MB *and* with LLM JSON outputs? Treat the overlap signal as the most important data point. |
+| **Cold-email persona-overlap experiment** | W1 Fri (batch 1), W2 Fri (batch 2) | 50 messages | **Reframed.** Two question variants: (A) "Do you work with large JSON exports >100MB?" (B) "Do you ship LLM-generated JSON to production?" Track answers separately and **overlap rate**. <10% overlap = funnel broken, pivot wedge in W3. <5% total reply rate on either = different problem. |
+| **Native structured output disruption test** | W2 evening | 2hr | 5 schemas in GPT-4o strict mode. If <20% slip through semantically, OpenAI has eaten the paid wedge — pivot toward API-payload-drift angle now. |
+| **Launch narrative A/B drafts** | Fri W3 | half-day | Decision based on W3 Friday benchmark + cold-email data. |
+| **`vite preview` perf check** | Every Friday | 30 min | Catch dev-mode-masked regressions. |
+| **SEO content drafting** | W2-W3 evenings | 4 evenings | Draft the 4 × 1,500-word landings as background work so Friday W4 isn't a panic. |
+| **Trademark/availability matrix** | W2 Mon-Wed | half-day | USPTO + EU TM + .com + .dev + GitHub org + npm scope + Twitter handle for all 3 candidate names. |
 
 ---
 
-## Testing strategy (~2 days total)
+## Share UX — explicit privacy contract
+
+The "100% client-side" badge in the topbar makes a strong privacy promise. Share links break that promise. The UX must make this transparent:
+
+1. **Badge states:**
+   - **Green "100% client-side":** default. Data has not left the browser this session.
+   - **Yellow "Shared (1)":** at least one share link created this session. Hover shows: "You've uploaded a compressed copy of this JSON to our servers via Share. Revoke active links anytime."
+
+2. **Share modal flow:**
+   - User clicks Share → modal appears.
+   - **Modal copy:** "Sharing uploads a compressed copy of this JSON to our servers so the recipient can view it. The link is private (only people with the URL can view) but the data leaves your device. Continue?"
+   - Two buttons: "Yes, create link" / "Cancel."
+   - Optional: "Want sharing that stays local? [Self-host with our SDK]" — conversion hook, not pushy.
+
+3. **Storage:**
+   - Source ≤4MB compressed → KV (1MB KV value limit accommodates ~5-10MB JSON after gzip).
+   - Source >4MB compressed → R2 with signed URL.
+   - Default TTL: 7 days. User can pick 24h, 7d, 30d, or "until revoked" (free users get 7d max).
+
+---
+
+## Email capture — specific value exchange
+
+Generic "get notified when our SDK launches" yields 1-2% capture. We do better:
+
+**Offer:** "Get the JSON-to-Schema CLI (free) — paste any JSON, get a TS/Zod schema, in your terminal."
+
+**Mechanism:**
+
+1. User enters email → CF Worker stores in KV with timestamp + source-route.
+2. Worker emits an email (via Resend or Postmark) with: `npm install -g [tool-name]-cli` install instructions, a sample invocation, and a one-line tease for the paid product ("Coming soon: continuous schema-drift monitoring for your LLM JSON pipelines").
+3. CLI itself is a thin wrapper over the same `inferSchema` worker code, packaged via npm. ~half-day of work in W4 Thursday alongside email capture.
+
+This gives users an immediate, tangible benefit and qualifies them as "actually uses JSON tooling at the terminal."
+
+---
+
+## Testing strategy
 
 | Layer | Test? | Coverage |
 |---|---|---|
-| Unit (Vitest) | Yes, narrow | `flattenTree`, `pathing` (JSON Pointer encode/decode), `inferSchema` |
-| Worker contract | Yes | Worker emits expected events on known fixtures — catches silent parser-lib upgrades |
-| E2E (Playwright) | Yes, smoke | 5 tests: homepage → paste sample → tree renders → expand → copy path |
-| Benchmarks | Local/nightly only | Not in CI. Run before launch + weekly. |
-| Accessibility | Partial | Keyboard nav for tree; focus mgmt in dialogs; one axe test |
-| Component (RTL) | Skip | Snapshot tests of tree rows aren't worth the time |
-| Visual regression | Skip | Manual review fine at this size |
+| Unit (Vitest) | Yes, narrow | `flattenTree`, `pathing`, `inferSchema`, `ndjson` detection |
+| Worker contract | Yes | Worker emits expected events on known fixtures (JSON + NDJSON) |
+| E2E (Playwright) | Yes, smoke | 6 tests: homepage → paste sample → tree renders → expand → copy path → NDJSON load |
+| Benchmarks | Local/nightly only | Run before launch + weekly |
+| Accessibility | Partial | Keyboard nav for tree; one axe test |
+| Component (RTL) | Skip | Not worth the time |
 
 ---
 
-## Risks (ranked by likelihood)
+## Risks (ranked by likelihood, updated)
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| `stream-json` fights Vite worker bundling | High | 2-day slip | Spike Day 1 W1. Fall back to `@streamparser/json` immediately. |
-| Byte-offset emission unreliable / UTF-8 mid-character cuts | Medium | Lazy-expand chain breaks entirely | Day-1 spike tests (b)+(c)+(d) explicitly. Snap offsets to structural boundaries at index-build time. If both parsers fail offset emission, fall back to "full-spine, no lazy expand" — caps usable size at ~150MB but still ships. |
-| 500MB benchmark misses | Medium | Launch narrative weakens | Pre-bake A/B narratives by Fri W3. Pivot decision is data-driven end of W3, not panic at launch. |
+| **Free→paid persona overlap is too low** | High (most likely failure mode) | Funnel broken; M2 has no qualified leads | W1-W2 cold-email experiment measures overlap directly. <10% triggers wedge rethink in W3. |
+| Byte-offset emission unreliable / UTF-8 mid-character cuts | Medium | Lazy-expand breaks | Snap offsets to structural boundaries at index-build time. Fallback: "full-spine, no lazy expand" caps usable at ~150MB. |
+| 500MB benchmark misses | Medium | Launch narrative weakens | Pre-bake A/B narratives by Fri W3. Decision is data-driven. |
 | Monaco bloats first paint >3s | Medium | SEO + UX hit | Lazy-load Monaco; textarea fallback first paint; SEO pages don't load Monaco. |
-| Tree perf dies in `vite preview` despite OK in `vite dev` | Medium | Late surprise | `vite preview` perf check every Friday (Parallel ops). |
-| Pulled into M2 features (semantic diff, AI) | High | Wedge weakens | Hard rule: nothing from M2 ships in M1. Slack → perf. Cut order (in W3 section) decides what goes first if time tightens. |
-| SEO indexing takes 4–8 weeks | High | No M1 SEO traffic | Acceptable. M1 traffic = HN/Twitter; SEO compounds M2–M3. |
-| Customer-call recruiting lead time underestimated | High | 0 calls instead of 5 | Outreach in W1, not W3. Templates drafted by Fri W1. 2-week lead time is non-negotiable. |
-| **Free-tool → paid-SDK conversion is untested and load-bearing** | High | Free tool gets traffic, paid product gets no leads | Cold-email experiment in W1 validates SDK demand *independently* of free-tool funnel. <5% reply or <2/10 "would pay" → wedge rethink in W2. |
-| **Native structured output disruption** (OpenAI strict, Anthropic tool use) | Medium (12-mo horizon) | Entry wedge evaporates | W2 evening test: induce semantic failures in GPT-4o strict mode. If <20% slip through, pivot wedge toward API-payload-drift now, not in M3. |
-| Domain / name decision drags past W2 | Medium | Blocks OG image, HN draft, benchmark video | Pick from 3 candidates by Fri W2; register domain + GitHub + Twitter same day. |
+| Tree perf dies in `vite preview` | Medium | Late surprise | `vite preview` perf check every Friday. |
+| Pulled into M2 features | High | Wedge weakens | Hard rule: nothing M2 ships in M1. Cut order decides what goes first. |
+| SEO indexing takes 4-8 weeks | High | No M1 SEO traffic | Acceptable. M1 traffic = HN/Reddit/Twitter/newsletters; SEO compounds M2-M3. |
+| Customer-call recruiting lead time underestimated | Medium | <5 calls | Outreach in W1. Templates by Fri W1. |
+| **NDJSON detection false positives/negatives** | Medium | Some files mis-handled | Sample first 4KB; offer manual override toggle in UI. |
+| Native structured output disruption | Medium (12-mo horizon) | Entry wedge evaporates | W2 disruption test. <20% semantic slip-through triggers pivot. |
+| Domain/name decision drags past W2 | Low (now Mon-Wed deadline) | Blocks OG, HN draft, video | Hard Wed W2 deadline on availability matrix. |
+| **KV 1MB value limit hit by share links** | Low | Share button breaks on bigger files | R2 fallback wired by W4 Thursday. UI tells user when share exceeds limit. |
+| **A11y criticism on HN** | Medium | Brand hit, defensive thread | Pre-write response acknowledging virtualized-tree a11y is open; link to GH issue. |
 
 ---
 
@@ -394,60 +412,130 @@ These are off-keyboard tasks that validate the strategic bet. Skipping them mean
 
 Binary checklist (no "mostly"):
 
-- [x] **Day-1 spike (2026-05-14):** parser locked = `@streamparser/json`. (a) bundles in Vite ES-module worker ✓. (b)+(c)+(d) all pass on ASCII + UTF-8 builtin fixtures ✓. 50MB telemetry fixture: parser handles correctly (fires onValue for top-level `events`); spike's placeholder string-search offset recovery confirmed unviable on formatted JSON (expected) — **production offset capture must use `@streamparser/json`'s `Tokenizer.onToken` (per-token byte offsets), not high-level `onValue` + string-search**. Captured as W3 priority. Two implementation notes: do NOT call `parser.end()` when input is complete (auto-finalizes; second call throws); snap captured offsets to structural token boundaries per the Offset-safety rule in Architecture.
+### Build
+
+- [x] **Day-1 spike (2026-05-14):** parser = `@streamparser/json`. Production offset capture uses `Tokenizer.onToken`.
 - [ ] Public URL live (CF Pages or custom domain)
-- [ ] Name picked, domain + GitHub org + Twitter handle registered (by Fri W2)
+- [ ] Name picked, **domain + GitHub org + npm scope + Twitter handle registered** (by Fri W2)
 - [ ] Paste 1MB JSON → format → tree expands smoothly
 - [ ] 200MB JSON loads, renders spine, can navigate top 3 levels
-- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works in slow path
+- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works
+- [ ] **200MB NDJSON loads, paginates by line, expand-line works**
 - [ ] Schema inference exports JSON Schema, TS, Zod from a 1MB JSON
 - [ ] `jsonrepair` fixes a deliberately-broken LLM JSON sample
-- [ ] All 8 SEO routes return 200 with unique `<title>`/`<meta>` in prerendered HTML
-- [ ] `public/_headers` CSP verified live (only Plausible allowed; CSP visible in browser devtools)
-- [ ] `?url=` handler enforces 100MB cap, content-type allowlist, 3-redirect max, 30s abort
+- [ ] **Table view renders top-level array as sortable table**
+- [ ] **JSONPath query bar returns results on 100k-node JSON in <500ms**
+- [ ] **jq query bar runs `.events[] | select(.status=="error")` on 200MB telemetry**
+
+### SEO & content
+
+- [ ] **4 SEO routes return 200 with ~1,500 words original content each**
+- [ ] Unique `<title>` / `<meta>` / `<h1>` per route
 - [ ] Sitemap submitted to Google Search Console
-- [ ] Plausible firing events: page views, parse-success, parse-error, repair-used, large-file-loaded-{50,200,500}
-- [ ] Email capture working (CF Worker → KV)
-- [ ] Shareable links working (gzip + KV)
-- [ ] Benchmark video recorded vs jsonhero / stack.hu / jsoncrack / jsoneditoronline
+- [ ] `public/_headers` CSP verified live
+
+### Privacy & safety
+
+- [ ] `?url=` handler enforces **500MB cap (matching hero)**, content-type allowlist, 3-redirect max, 30s abort
+- [ ] **Share modal shows explicit consent before upload**
+- [ ] **CSP badge dims when share link active**
+- [ ] **PWA installable; offline mode works for files already loaded**
+
+### Conversion
+
+- [ ] Plausible firing events: page views, parse-success, parse-error, repair-used, large-file-loaded-{50,200,500}, **ndjson-loaded, query-run, share-created**
+- [ ] **Email capture with CLI value exchange working end-to-end**
+- [ ] Shareable links working (KV for ≤4MB, R2 for larger)
+
+### Launch
+
+- [ ] Benchmark video recorded vs jsonhero / stack.hu / jsoncrack / jsoneditoronline (JSON + NDJSON fixtures)
+- [ ] **Benchmark methodology page published** (hardware, browser, fixtures, repro)
 - [ ] **Both A and B launch narratives drafted** (HN post + OG + video script) by Fri W3
+- [ ] **A11y response pre-written for HN comments**
+- [ ] **Launch channel sequence queued:** HN → Reddit → Lobsters → Twitter → newsletters
 - [ ] 5 strangers gave recorded feedback; ≥3 found a real bug/UX issue
-- [ ] **Parallel-ops outcomes recorded:** customer-call notes (≥3), cold-email reply/pay rates, native-structured-output test result
-- [ ] Lighthouse 90+ on `/`, `/json-viewer`, `/large-json-viewer`
+
+### Validation
+
+- [ ] **Cold-email persona-overlap data captured** (reply rate, overlap rate, qualitative quotes)
+- [ ] Customer-call notes (≥3)
+- [ ] Native-structured-output disruption test result documented
+
+### Quality
+
+- [ ] Lighthouse 90+ on `/`, `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`
 - [ ] CI green: `tsc && eslint && vitest && playwright smoke`
 - [ ] Repo flipped public on launch day
 
 **Verification commands:**
 
 ```bash
-# Build + verify all SEO routes have unique titles
+# Build + verify SEO routes (now 4)
 npm run build
-npx serve dist &  # or: npm run preview
-for route in / json-viewer json-formatter json-validator large-json-viewer \
-             json-to-typescript json-to-zod json-repair; do
+npx serve dist &
+for route in / json-viewer large-json-viewer ndjson-viewer json-repair; do
   echo "--- /$route ---"
   curl -s "http://localhost:4173/$route" | grep -E "<title>|<meta name=\"description\""
+  word_count=$(curl -s "http://localhost:4173/$route" | sed 's/<[^>]*>//g' | wc -w)
+  echo "Word count: $word_count (target: ≥1500)"
 done
 
-# CI
 npm run typecheck && npm run lint && npm run test && npm run test:e2e
 
-# Benchmarks (manual)
-node benchmarks/generate.mjs --size 500
-node benchmarks/run.mjs --fixture corpus/500mb.json
+# Benchmarks
+node benchmarks/generate.mjs --shape telemetry --size 500
+node benchmarks/generate.mjs --shape ndjson-telemetry --size 200
+node benchmarks/run.mjs --fixture corpus/500mb-telemetry.json
+node benchmarks/run.mjs --fixture corpus/200mb-telemetry.ndjson
 ```
 
 ---
 
 ## Out of scope (Month 1) — deferred decisions
 
-Decided as they come up, not pre-committed:
+Decided as they come up:
 
-- Brand name + custom domain (placeholder OK)
 - Open-source the free tool itself (default: closed Month 1; revisit Month 4)
 - Sample-file CDN hosting cost cap
-- Switch from `react-window` to `@tanstack/react-virtual` (revisit Month 2 if perf walls)
-- Switch from `stream-json` to `simdjson-wasm` for medium files (revisit Month 2)
+- Switch from `react-window` to `@tanstack/react-virtual` (revisit Month 2)
+- Switch from `@streamparser/json` to `simdjson-wasm` for medium files (revisit Month 2)
 - Auth/Clerk integration (Month 2)
-- Postgres/Bun backend (Month 2)
+- Postgres backend (Month 2)
 - Customer discovery calls beyond 5 (Month 2 picks up the rest)
+- Graph view (JSON Crack-style node graph) — revisit M2 if customer calls request it
+- Semantic diff with array-element identity, type drift detection, schema-aware comparison — M2 wedge
+- AI grounded explanations for LLM JSON failures — M2 paid tier
+- VSCode extension — M3
+- JetBrains plugin — M3+
+- Mobile-optimized layouts — M3+
+- Chrome extension for auto-formatting JSON pages — M3
+- JWT decode, base64 inline decode, gzip/brotli auto-decode — M2 nice-to-have
+
+---
+
+## What changed from v1 — summary
+
+**Added to scope:**
+
+- NDJSON / JSON Lines support in W3 Thursday
+- JSONPath + jq query bar in W4 Wednesday
+- Read-only table view in W4 Wednesday
+- Specific value-exchange for email capture (free CLI)
+- Trademark/availability check Mon-Wed of W2
+- Benchmark video gets 2 days instead of half
+- Multi-channel launch sequence (HN → Reddit → Lobsters → Twitter → newsletters)
+- Benchmark methodology page
+- Pre-written a11y response
+- Share modal with explicit consent and dimmed CSP badge
+- KV/R2 split for share storage
+
+**Cut/reduced:**
+
+- SEO routes 8 → 4, each with ~1,500 words original content
+- `?url=` cap aligned to hero (500MB, not 100MB)
+- Cold-email experiment reframed to test persona overlap, not just SDK demand
+
+**Unchanged:**
+
+- 4-week shape, Day-1 spike outcome, architecture diagram, ceiling probabilities, cut order, locked stack, parallel-ops cadence
