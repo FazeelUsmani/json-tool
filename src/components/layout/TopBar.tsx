@@ -16,15 +16,13 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Badge
-              variant="outline"
-              className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300"
-            >
+            <Badge variant="outline" className="gap-1.5">
+              <span className="size-1.5 rounded-full bg-emerald-500" />
               100% client-side
             </Badge>
           </TooltipTrigger>
           <TooltipContent>
-            Your JSON never leaves your browser. CSP will enforce this in production.
+            Your JSON never leaves the browser. View the CSP headers.
           </TooltipContent>
         </Tooltip>
       </div>
