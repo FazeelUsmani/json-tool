@@ -18,6 +18,11 @@ import { immer } from 'zustand/middleware/immer';
 import { flattenTree, type FlatRow } from '@/lib/tree/flatten';
 import type { TreeNode } from '@/lib/tree/parse';
 
+// On reparse: preserve focus and drawer by id lookup. The lookup is O(N)
+// over the new flat array, but it runs once per debounced reparse (not per
+// keystroke), so the cost is bounded. Without preservation, typing in
+// Monaco resets the tree-pane focus every 150ms — surprising UX.
+
 // Immer ships Map/Set support behind an opt-in plugin. `closed` is a Set,
 // and any toggle() call would throw inside the producer without this.
 // Idempotent — safe to call multiple times under HMR.
@@ -29,12 +34,21 @@ type ViewState = {
   // Empty string when no search is active. The (b) visibility rule treats
   // closed as ignored during search — see search.ts.
   query: string;
+  // Index into `flat`. Keyboard nav writes this; Breadcrumb + focus styling
+  // read it.
+  focusedIndex: number | null;
+  // The row currently shown in the detail drawer. Null when the drawer is
+  // closed. Holds the FlatRow by reference; reset on every reparse.
+  drawerFor: FlatRow | null;
 };
 
 type ViewActions = {
   setRoot: (root: TreeNode | null) => void;
   toggle: (id: string) => void;
   setQuery: (query: string) => void;
+  setFocusedIndex: (index: number | null) => void;
+  openDrawer: (row: FlatRow) => void;
+  closeDrawer: () => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
@@ -42,9 +56,30 @@ export const useViewStore = create<ViewState & ViewActions>()(
     flat: [],
     closed: new Set<string>(),
     query: '',
+    focusedIndex: null,
+    drawerFor: null,
     setRoot: (root) =>
       set((state) => {
-        state.flat = root === null ? [] : flattenTree(root);
+        const newFlat = root === null ? [] : flattenTree(root);
+        // Snapshot the ids we want to preserve before overwriting state.flat.
+        const oldFocusedId =
+          state.focusedIndex !== null
+            ? (state.flat[state.focusedIndex]?.id ?? null)
+            : null;
+        const oldDrawerId = state.drawerFor?.id ?? null;
+        state.flat = newFlat;
+        if (oldFocusedId !== null) {
+          const idx = newFlat.findIndex((r) => r.id === oldFocusedId);
+          state.focusedIndex = idx >= 0 ? idx : null;
+        } else {
+          state.focusedIndex = null;
+        }
+        if (oldDrawerId !== null) {
+          const row = newFlat.find((r) => r.id === oldDrawerId);
+          state.drawerFor = row ?? null;
+        } else {
+          state.drawerFor = null;
+        }
       }),
     toggle: (id) =>
       set((state) => {
@@ -57,6 +92,18 @@ export const useViewStore = create<ViewState & ViewActions>()(
     setQuery: (query) =>
       set((state) => {
         state.query = query;
+      }),
+    setFocusedIndex: (index) =>
+      set((state) => {
+        state.focusedIndex = index;
+      }),
+    openDrawer: (row) =>
+      set((state) => {
+        state.drawerFor = row;
+      }),
+    closeDrawer: () =>
+      set((state) => {
+        state.drawerFor = null;
       }),
   })),
 );

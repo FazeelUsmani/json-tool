@@ -1,4 +1,4 @@
-import { Copy } from 'lucide-react';
+import { Copy, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import type { TreeNode as TreeNodeData } from '@/lib/tree/parse';
 import type { FlatRow, ParentKind } from '@/lib/tree/flatten';
@@ -12,28 +12,49 @@ type PrimitiveNode = Extract<
 >;
 type CompositeNode = Extract<TreeNodeData, { kind: 'object' | 'array' }>;
 
-// W2-Mon: renders ONE row given a FlatRow. No recursion — TreeView maps
-// visible rows to <TreeNode> instances. Visual output is identical to the
-// previous recursive renderer.
-export function TreeNode({ row }: { row: FlatRow }) {
-  if (row.kind === 'open') return <OpenRow row={row} />;
-  if (row.kind === 'close') return <CloseRow row={row} />;
-  return <LeafRow row={row} />;
+// Renders ONE row given a FlatRow + its absolute flat index. The flatIdx is
+// what viewStore.focusedIndex stores; passing it down avoids per-row store
+// scans to derive the focused state.
+export function TreeNode({
+  row,
+  flatIdx,
+}: {
+  row: FlatRow;
+  flatIdx: number;
+}) {
+  if (row.kind === 'open') return <OpenRow row={row} flatIdx={flatIdx} />;
+  if (row.kind === 'close') return <CloseRow row={row} flatIdx={flatIdx} />;
+  return <LeafRow row={row} flatIdx={flatIdx} />;
 }
 
-function OpenRow({ row }: { row: Extract<FlatRow, { kind: 'open' }> }) {
+function OpenRow({
+  row,
+  flatIdx,
+}: {
+  row: Extract<FlatRow, { kind: 'open' }>;
+  flatIdx: number;
+}) {
   const closed = useViewStore((s) => s.closed);
   const query = useViewStore((s) => s.query);
   const toggle = useViewStore((s) => s.toggle);
+  const openDrawer = useViewStore((s) => s.openDrawer);
+  const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   // Search overrides collapse: while a query is active, every composite
   // renders open so search matches inside collapsed subtrees are visible.
-  // The `closed` Set itself is preserved — clearing the query restores it.
   const isClosed = query === '' && closed.has(row.id);
   const isObj = row.node.kind === 'object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
   return (
-    <Row pad={pad(row.depth)} path={row.id} onToggle={() => toggle(row.id)}>
+    <Row
+      pad={pad(row.depth)}
+      path={row.id}
+      isFocused={isFocused}
+      onFocus={() => setFocusedIndex(flatIdx)}
+      onToggle={() => toggle(row.id)}
+      onShowDetail={() => openDrawer(row)}
+    >
       <Caret open={!isClosed} />
       <KeyLabel name={row.node.key} parentKind={row.parentKind} />
       <span>{openCh}</span>
@@ -50,23 +71,51 @@ function OpenRow({ row }: { row: Extract<FlatRow, { kind: 'open' }> }) {
   );
 }
 
-function CloseRow({ row }: { row: Extract<FlatRow, { kind: 'close' }> }) {
+function CloseRow({
+  row,
+  flatIdx,
+}: {
+  row: Extract<FlatRow, { kind: 'close' }>;
+  flatIdx: number;
+}) {
+  const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   return (
-    <div style={pad(row.depth)}>
+    <div
+      className={`flex items-center border-l-2 ${
+        isFocused ? 'border-primary bg-accent/30' : 'border-transparent'
+      }`}
+      style={pad(row.depth)}
+      onMouseDown={() => setFocusedIndex(flatIdx)}
+    >
       <CaretSpacer />
       {row.closeBracket}
     </div>
   );
 }
 
-function LeafRow({ row }: { row: Extract<FlatRow, { kind: 'leaf' }> }) {
+function LeafRow({
+  row,
+  flatIdx,
+}: {
+  row: Extract<FlatRow, { kind: 'leaf' }>;
+  flatIdx: number;
+}) {
+  const openDrawer = useViewStore((s) => s.openDrawer);
+  const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   const node = row.node;
   if (node.kind === 'object' || node.kind === 'array') {
-    // Empty composite renders inline as one row, no toggle.
     const openCh = node.kind === 'object' ? '{' : '[';
     const closeCh = node.kind === 'object' ? '}' : ']';
     return (
-      <Row pad={pad(row.depth)} path={row.id}>
+      <Row
+        pad={pad(row.depth)}
+        path={row.id}
+        isFocused={isFocused}
+        onFocus={() => setFocusedIndex(flatIdx)}
+        onShowDetail={() => openDrawer(row)}
+      >
         <CaretSpacer />
         <KeyLabel name={node.key} parentKind={row.parentKind} />
         <span>
@@ -77,7 +126,13 @@ function LeafRow({ row }: { row: Extract<FlatRow, { kind: 'leaf' }> }) {
     );
   }
   return (
-    <Row pad={pad(row.depth)} path={row.id}>
+    <Row
+      pad={pad(row.depth)}
+      path={row.id}
+      isFocused={isFocused}
+      onFocus={() => setFocusedIndex(flatIdx)}
+      onShowDetail={() => openDrawer(row)}
+    >
       <CaretSpacer />
       <KeyLabel name={node.key} parentKind={row.parentKind} />
       <TypePill kind={node.kind} />
@@ -93,24 +148,55 @@ function pad(depth: number): React.CSSProperties {
 function Row({
   pad,
   path,
+  isFocused,
+  onFocus,
   onToggle,
+  onShowDetail,
   children,
 }: {
   pad: React.CSSProperties;
   path: string;
+  isFocused: boolean;
+  onFocus: () => void;
   onToggle?: () => void;
+  onShowDetail?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="group hover:bg-muted/40 flex items-center" style={pad}>
+    <div
+      className={`group flex items-center border-l-2 ${
+        isFocused
+          ? 'border-primary bg-accent/30'
+          : 'hover:bg-muted/40 border-transparent'
+      }`}
+      style={pad}
+      onMouseDown={onFocus}
+    >
       <span
         className={`flex-1 ${onToggle ? 'cursor-pointer select-none' : ''}`}
         onClick={onToggle}
       >
         {children}
       </span>
+      {onShowDetail && <InfoButton onClick={onShowDetail} />}
       <CopyButton path={path} />
     </div>
+  );
+}
+
+function InfoButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      title="Show details"
+      className="hover:bg-muted text-muted-foreground rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+    >
+      <Info className="size-3" />
+    </button>
   );
 }
 
@@ -132,7 +218,7 @@ function CopyButton({ path }: { path: string }) {
       type="button"
       onClick={handleClick}
       title={`Copy ${path}`}
-      className="hover:bg-muted ml-2 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+      className="hover:bg-muted ml-1 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
     >
       <Copy className="text-muted-foreground size-3" />
     </button>
@@ -147,10 +233,6 @@ function Caret({ open }: { open: boolean }) {
   );
 }
 
-// Width-only spacer for rows without a caret (close brackets, leaves).
-// Same w-4 as Caret so primitive and composite rows align vertically.
-// Separated from Caret so neither component has to know about the other's
-// concern.
 function CaretSpacer() {
   return <span aria-hidden className="inline-block w-4" />;
 }
@@ -229,8 +311,6 @@ function Value({ node }: { node: PrimitiveNode }) {
         </span>
       );
     case 'null':
-      // null isn't a search target by design.
       return <span className="text-muted-foreground">null</span>;
   }
 }
-

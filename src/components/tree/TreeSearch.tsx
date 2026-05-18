@@ -39,10 +39,11 @@ export function TreeSearch({
     <div className="bg-background flex items-center gap-2 border-b px-3 py-1.5">
       <div className="relative flex-1">
         <Input
+          data-tree-search
           value={localQuery}
           onChange={(e) => setLocalQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search keys / values…"
+          placeholder="Search keys / values… (press / to focus)"
           className="h-7 text-xs"
         />
         {localQuery && (
