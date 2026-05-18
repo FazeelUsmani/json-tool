@@ -1,57 +1,69 @@
-import { useState } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import type { TreeNode as TreeNodeData } from '@/lib/tree/parse';
+import type { FlatRow, ParentKind } from '@/lib/tree/flatten';
 import { copyText } from '@/lib/clipboard';
+import { useViewStore } from '@/state/viewStore';
 
 type PrimitiveNode = Extract<
   TreeNodeData,
   { kind: 'string' | 'number' | 'boolean' | 'null' }
 >;
+type CompositeNode = Extract<TreeNodeData, { kind: 'object' | 'array' }>;
 
-// Whether the immediate parent is an object or array — drives the rendered
-// key format. JSONPath uses `.name` for object members and `[0]` for array
-// elements; mirroring that here means the click-to-copy path matches what
-// the user sees in the row.
-type ParentKind = 'object' | 'array' | 'root';
-
-export function TreeNode({
-  node,
-  depth,
-  parentKind = 'root',
-}: {
-  node: TreeNodeData;
-  depth: number;
-  parentKind?: ParentKind;
-}) {
-  if (node.kind === 'object' || node.kind === 'array') {
-    return <Composite node={node} depth={depth} parentKind={parentKind} />;
-  }
-  return <Primitive node={node} depth={depth} parentKind={parentKind} />;
+// W2-Mon: renders ONE row given a FlatRow. No recursion — TreeView maps
+// visible rows to <TreeNode> instances. Visual output is identical to the
+// previous recursive renderer.
+export function TreeNode({ row }: { row: FlatRow }) {
+  if (row.kind === 'open') return <OpenRow row={row} />;
+  if (row.kind === 'close') return <CloseRow row={row} />;
+  return <LeafRow row={row} />;
 }
 
-function Composite({
-  node,
-  depth,
-  parentKind,
-}: {
-  node: Extract<TreeNodeData, { kind: 'object' | 'array' }>;
-  depth: number;
-  parentKind: ParentKind;
-}) {
-  const [open, setOpen] = useState(true);
-  const empty = node.children.length === 0;
-  const isObj = node.kind === 'object';
+function OpenRow({ row }: { row: Extract<FlatRow, { kind: 'open' }> }) {
+  const closed = useViewStore((s) => s.closed);
+  const toggle = useViewStore((s) => s.toggle);
+  const isClosed = closed.has(row.id);
+  const isObj = row.node.kind === 'object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
-  const pad = { paddingLeft: depth * 16 };
-  const childParent: ParentKind = isObj ? 'object' : 'array';
+  return (
+    <Row pad={pad(row.depth)} path={row.id} onToggle={() => toggle(row.id)}>
+      <Caret open={!isClosed} />
+      <KeyLabel name={row.node.key} parentKind={row.parentKind} />
+      <span>{openCh}</span>
+      {isClosed && (
+        <>
+          <span className="text-muted-foreground">
+            {' '}
+            … {closeCh}
+          </span>
+          <CountPill count={row.node.children.length} kind={row.node.kind} />
+        </>
+      )}
+    </Row>
+  );
+}
 
-  if (empty) {
+function CloseRow({ row }: { row: Extract<FlatRow, { kind: 'close' }> }) {
+  return (
+    <div style={pad(row.depth)}>
+      <Caret hidden />
+      {row.closeBracket}
+    </div>
+  );
+}
+
+function LeafRow({ row }: { row: Extract<FlatRow, { kind: 'leaf' }> }) {
+  const node = row.node;
+  if (node.kind === 'object' || node.kind === 'array') {
+    // Empty composite renders inline as one row, no toggle.
+    const openCh = node.kind === 'object' ? '{' : '[';
+    const closeCh = node.kind === 'object' ? '}' : ']';
     return (
-      <Row pad={pad} path={node.path}>
+      <Row pad={pad(row.depth)} path={row.id}>
         <Caret hidden />
-        <KeyLabel name={node.key} parentKind={parentKind} />
+        <KeyLabel name={node.key} parentKind={row.parentKind} />
         <span>
           {openCh}
           {closeCh}
@@ -59,66 +71,20 @@ function Composite({
       </Row>
     );
   }
-
   return (
-    <>
-      <Row pad={pad} path={node.path} onToggle={() => setOpen(!open)}>
-        <Caret open={open} />
-        <KeyLabel name={node.key} parentKind={parentKind} />
-        <span>{openCh}</span>
-        {!open && (
-          <>
-            <span className="text-muted-foreground">
-              {' '}
-              … {closeCh}
-            </span>
-            <CountPill count={node.children.length} kind={node.kind} />
-          </>
-        )}
-      </Row>
-      {open && (
-        <>
-          {node.children.map((child, i) => (
-            <TreeNode
-              key={i}
-              node={child}
-              depth={depth + 1}
-              parentKind={childParent}
-            />
-          ))}
-          <div style={pad}>
-            <Caret hidden />
-            {closeCh}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-function Primitive({
-  node,
-  depth,
-  parentKind,
-}: {
-  node: PrimitiveNode;
-  depth: number;
-  parentKind: ParentKind;
-}) {
-  return (
-    <Row pad={{ paddingLeft: depth * 16 }} path={node.path}>
+    <Row pad={pad(row.depth)} path={row.id}>
       <Caret hidden />
-      <KeyLabel name={node.key} parentKind={parentKind} />
+      <KeyLabel name={node.key} parentKind={row.parentKind} />
       <TypePill kind={node.kind} />
       <Value node={node} />
     </Row>
   );
 }
 
-// Single row layout: content on the left grows; copy button sits at the
-// right edge, hidden until the row is hovered. Toggle (for composites) is
-// only on the left content span, so clicking the copy button never fires
-// the toggle.
+function pad(depth: number): React.CSSProperties {
+  return { paddingLeft: depth * 16 };
+}
+
 function Row({
   pad,
   path,
@@ -218,7 +184,7 @@ function CountPill({
   kind,
 }: {
   count: number;
-  kind: 'object' | 'array';
+  kind: CompositeNode['kind'];
 }) {
   return (
     <span className="text-muted-foreground bg-muted/40 ml-1 inline-block rounded px-1 py-px font-mono text-[10px]">
