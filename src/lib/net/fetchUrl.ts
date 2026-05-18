@@ -3,7 +3,7 @@
 // Constraints (PLAN.MD W1 Tue):
 //   - client-side fetch only (no proxy)
 //   - reject Content-Length > 100 MiB
-//   - allowlist application/json + text/plain
+//   - allowlist application/json + JSON Lines variants + text/plain
 //   - 30s timeout (composable with caller AbortSignal)
 //   - HTTP errors mapped to typed result, not exceptions
 //
@@ -47,10 +47,14 @@ export interface FetchUrlOptions {
   signal?: AbortSignal;
 }
 
+// TODO(W3): bump to 500MB once Tokenizer.onToken streaming parser lands —
+// today's main-thread JSON.parse path can't handle that without OOM.
 const DEFAULT_MAX_BYTES = 100 * 1024 * 1024; // 100 MiB
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ALLOWED_CONTENT_TYPES: readonly string[] = [
   'application/json',
+  'application/x-ndjson',
+  'application/jsonlines',
   'text/plain',
 ];
 

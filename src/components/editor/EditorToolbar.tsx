@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useDocumentStore } from '@/state/documentStore';
 import {
   formatJson,
@@ -8,18 +9,29 @@ import {
   type FormatError,
   type FormatResult,
 } from '@/lib/json/format';
+import { fetchUrl, type FetchUrlError } from '@/lib/net/fetchUrl';
 
 type Transform = (text: string) => FormatResult;
 
-export function EditorToolbar() {
+type Props = {
+  // Lifted to MonacoPane so format/URL errors AND file-drop errors share
+  // the same pill. Ephemeral UI state — stays out of documentStore.
+  error: string | null;
+  setError: (error: string | null) => void;
+};
+
+export function EditorToolbar({ error, setError }: Props) {
   const text = useDocumentStore((s) => s.text);
   const source = useDocumentStore((s) => s.source);
   const setText = useDocumentStore((s) => s.setText);
-  const [error, setError] = useState<FormatError | null>(null);
+
+  const [urlInput, setUrlInput] = useState('');
+  const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
+  // Tracked separately from source.url (which holds the resolved finalUrl
+  // from fetchUrl). When they differ, a redirect happened — surface it.
+  const [requestedUrl, setRequestedUrl] = useState<string | null>(null);
 
   const run = (transform: Transform) => {
-    // Empty editor → no-op. Clicking Format on nothing should do nothing,
-    // not accuse the user of forgetting to paste.
     if (text.trim() === '') return;
     const result = transform(text);
     if (result.ok) {
@@ -27,32 +39,126 @@ export function EditorToolbar() {
       setError(null);
       return;
     }
-    setError(result.error);
+    setError(describeFormatError(result.error));
   };
 
+  const loadFromUrl = async (url: string) => {
+    setLoadingUrl(url);
+    setRequestedUrl(url);
+    setError(null);
+    try {
+      const result = await fetchUrl(url);
+      if (result.ok) {
+        setText(result.text, { kind: 'url', url: result.finalUrl });
+        return;
+      }
+      setError(describeFetchError(result.error));
+    } finally {
+      setLoadingUrl(null);
+    }
+  };
+
+  const handleUrlSubmit = () => {
+    const url = urlInput.trim();
+    if (url === '' || loadingUrl !== null) return;
+    loadFromUrl(url);
+  };
+
+  useEffect(() => {
+    const url = new URLSearchParams(window.location.search).get('url');
+    if (url) loadFromUrl(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const showChip =
+    loadingUrl !== null ||
+    source?.kind === 'url' ||
+    source?.kind === 'file';
+  const redirected =
+    source?.kind === 'url' && requestedUrl !== null && requestedUrl !== source.url;
+
   return (
-    <div className="bg-background flex items-center gap-2 border-b px-3 py-2">
-      <Button variant="outline" size="sm" onClick={() => run(formatJson)}>
-        Format
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => run(minifyJson)}>
-        Minify
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => run(sortKeysJson)}>
-        Sort keys
-      </Button>
-      {error && (
-        <span className="bg-destructive/10 text-destructive ml-2 rounded-md px-2 py-1 text-xs">
-          {describeError(error)}
-        </span>
+    <div className="border-b">
+      <div className="bg-background flex items-center gap-2 px-3 py-2">
+        <Button variant="outline" size="sm" onClick={() => run(formatJson)}>
+          Format
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => run(minifyJson)}>
+          Minify
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => run(sortKeysJson)}>
+          Sort keys
+        </Button>
+        <Input
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleUrlSubmit();
+          }}
+          placeholder="Load from URL…"
+          disabled={loadingUrl !== null}
+          className="ml-2 h-7 max-w-xs text-xs"
+        />
+        {error && (
+          <span className="bg-destructive/10 text-destructive ml-2 rounded-md px-2 py-1 text-xs">
+            {error}
+          </span>
+        )}
+      </div>
+      {showChip && (
+        <div className="text-muted-foreground bg-muted/40 border-t px-3 py-1 text-xs">
+          {loadingUrl !== null ? (
+            <>
+              Loading from <span className="font-mono">{loadingUrl}</span>…
+            </>
+          ) : source?.kind === 'url' ? (
+            <>
+              Loaded from{' '}
+              <span className="font-mono">{requestedUrl ?? source.url}</span>
+              {redirected && (
+                <>
+                  {' · '}redirected to{' '}
+                  <span className="font-mono">{source.url}</span>
+                </>
+              )}
+            </>
+          ) : source?.kind === 'file' ? (
+            <>
+              Loaded from <span className="font-mono">{source.name}</span>
+            </>
+          ) : null}
+        </div>
       )}
     </div>
   );
 }
 
-function describeError(error: FormatError): string {
+function describeFormatError(error: FormatError): string {
   if (error.line !== undefined && error.col !== undefined) {
     return `Invalid JSON at line ${error.line} col ${error.col}`;
   }
   return 'Invalid JSON';
+}
+
+function describeFetchError(error: FetchUrlError): string {
+  switch (error.kind) {
+    case 'invalid-url':
+      return 'Invalid URL';
+    case 'too-large':
+      return `Too large: ${formatBytes(error.contentLength)} > ${formatBytes(error.max)}`;
+    case 'unsupported-content-type':
+      return `Unsupported content type: ${error.got || 'unknown'}`;
+    case 'timeout':
+      return `Timed out after ${Math.round(error.afterMs / 1000)}s`;
+    case 'http':
+      return `HTTP ${error.status}${error.statusText ? ` ${error.statusText}` : ''}`;
+    case 'network':
+      return 'Network error';
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${Math.round(n / 1024 / 1024)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
 }

@@ -20,7 +20,7 @@ import { immer } from 'zustand/middleware/immer';
 
 export type DocumentSource =
   | { kind: 'paste' }
-  | { kind: 'drop'; filename: string }
+  | { kind: 'file'; name: string }
   | { kind: 'url'; url: string }
   | { kind: 'sample'; name: string }
   | null;

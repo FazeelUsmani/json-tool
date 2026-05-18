@@ -14,6 +14,11 @@ const MonacoEditor = lazy(async () => {
   return { default: mod.default };
 });
 
+// Matches fetchUrl.ts MAX_BYTES. TODO(W3): bump together when streaming
+// parser lands; today's JSON.parse path can't survive much above this.
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ['.json', '.ndjson', '.jsonl'] as const;
+
 function useDarkClass(): boolean {
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains('dark'),
@@ -37,10 +42,62 @@ export function MonacoPane() {
   const source = useDocumentStore((s) => s.source);
   const isDark = useDarkClass();
 
+  // Lifted from EditorToolbar so both transform/URL errors AND file-drop
+  // errors flow through the same pill. Ephemeral UI state — stays out of
+  // documentStore.
+  const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    // preventDefault BOTH here and in onDragOver — otherwise the browser
+    // navigates away from the page when a file lands.
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    const lower = file.name.toLowerCase();
+    if (!ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+      setError(`Unsupported file type: ${file.name}`);
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setError(
+        `Too large: ${formatBytes(file.size)} > ${formatBytes(MAX_FILE_BYTES)}`,
+      );
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      setText(content, { kind: 'file', name: file.name });
+      setError(null);
+    } catch {
+      setError(`Failed to read file: ${file.name}`);
+    }
+  };
+
   return (
     <div className="flex h-full w-full flex-col">
-      <EditorToolbar />
-      <div className="min-h-0 flex-1">
+      <EditorToolbar error={error} setError={setError} />
+      <div
+        className="relative min-h-0 flex-1"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          if (!isDragging) setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          // Children fire dragLeave on the parent as the pointer crosses
+          // their boundaries — relatedTarget tells us if we're actually
+          // leaving the wrapper or just moving inside it.
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setIsDragging(false);
+          }
+        }}
+        onDrop={handleDrop}
+      >
         <Suspense
           fallback={
             <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
@@ -55,10 +112,6 @@ export function MonacoPane() {
             value={text}
             onChange={(value) => {
               if (value === undefined) return;
-              // Preserve the existing source on edit. The first time content
-              // arrives via paste/drop/url, the relevant handler sets source
-              // explicitly. Subsequent typing keeps that provenance — a user
-              // editing pasted JSON shouldn't suddenly look like a "drop".
               setText(value, source ?? { kind: 'paste' });
             }}
             options={{
@@ -68,15 +121,23 @@ export function MonacoPane() {
               fontSize: 13,
               tabSize: 2,
               renderLineHighlight: 'gutter',
-              // Performance: Monaco eagerly does some work proportional to
-              // document size on every render. These two cut visible cost
-              // on large pastes without losing meaningful UX.
               largeFileOptimizations: true,
               automaticLayout: true,
             }}
           />
         </Suspense>
+        {isDragging && (
+          <div className="border-primary/50 bg-background/80 text-foreground pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-md border-2 border-dashed text-sm font-medium">
+            Drop JSON file here
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${Math.round(n / 1024 / 1024)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
 }
