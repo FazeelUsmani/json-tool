@@ -76,6 +76,13 @@ describe('findMatches', () => {
     expect(r.visibleSet.size).toBe(8);
   });
 
+  test('zero matches yields empty visibleSet (not the full tree)', () => {
+    const f = flat('{"a":1,"b":2}');
+    const r = findMatches(f, 'zzz-no-such-thing');
+    expect(r.matchIndices).toEqual([]);
+    expect(r.visibleSet.size).toBe(0);
+  });
+
   test('close rows are pulled in when their open is visible', () => {
     const f = flat('{"u":{"name":"x"}}');
     const r = findMatches(f, 'name');

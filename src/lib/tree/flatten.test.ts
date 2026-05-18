@@ -70,6 +70,18 @@ describe('flattenTree', () => {
     expect(flat).toHaveLength(1);
     expect(flat[0]).toMatchObject({ kind: 'leaf', id: '$', parentIndex: -1 });
   });
+
+  test('paths stay identical across reparses of unrelated edits', () => {
+    // Headline W2-Mon property: viewStore's `closed` Set is keyed by these
+    // path IDs and must survive edits that don't touch a given subtree.
+    // If anyone refactors to index-based IDs this test fires.
+    const flatA = flattenTree(parse('{"a":1,"b":{"c":2}}'));
+    const flatB = flattenTree(parse('{"a":1,"b":{"c":2},"d":3}'));
+    const idsA = flatA.filter((r) => r.id.startsWith('$.b')).map((r) => r.id);
+    const idsB = flatB.filter((r) => r.id.startsWith('$.b')).map((r) => r.id);
+    expect(idsA.length).toBeGreaterThan(0);
+    expect(idsA).toEqual(idsB);
+  });
 });
 
 describe('deriveVisible', () => {

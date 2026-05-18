@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { TreeNode as TreeNodeData } from '@/lib/tree/parse';
 import type { FlatRow, ParentKind } from '@/lib/tree/flatten';
 import { copyText } from '@/lib/clipboard';
+import { highlight } from '@/lib/tree/highlight';
 import { useViewStore } from '@/state/viewStore';
 
 type PrimitiveNode = Extract<
@@ -52,7 +53,7 @@ function OpenRow({ row }: { row: Extract<FlatRow, { kind: 'open' }> }) {
 function CloseRow({ row }: { row: Extract<FlatRow, { kind: 'close' }> }) {
   return (
     <div style={pad(row.depth)}>
-      <Caret hidden />
+      <CaretSpacer />
       {row.closeBracket}
     </div>
   );
@@ -66,7 +67,7 @@ function LeafRow({ row }: { row: Extract<FlatRow, { kind: 'leaf' }> }) {
     const closeCh = node.kind === 'object' ? '}' : ']';
     return (
       <Row pad={pad(row.depth)} path={row.id}>
-        <Caret hidden />
+        <CaretSpacer />
         <KeyLabel name={node.key} parentKind={row.parentKind} />
         <span>
           {openCh}
@@ -77,7 +78,7 @@ function LeafRow({ row }: { row: Extract<FlatRow, { kind: 'leaf' }> }) {
   }
   return (
     <Row pad={pad(row.depth)} path={row.id}>
-      <Caret hidden />
+      <CaretSpacer />
       <KeyLabel name={node.key} parentKind={row.parentKind} />
       <TypePill kind={node.kind} />
       <Value node={node} />
@@ -138,12 +139,20 @@ function CopyButton({ path }: { path: string }) {
   );
 }
 
-function Caret({ open, hidden }: { open?: boolean; hidden?: boolean }) {
+function Caret({ open }: { open: boolean }) {
   return (
     <span className="text-muted-foreground inline-block w-4 text-center">
-      {hidden ? '' : open ? '▾' : '▸'}
+      {open ? '▾' : '▸'}
     </span>
   );
+}
+
+// Width-only spacer for rows without a caret (close brackets, leaves).
+// Same w-4 as Caret so primitive and composite rows align vertically.
+// Separated from Caret so neither component has to know about the other's
+// concern.
+function CaretSpacer() {
+  return <span aria-hidden className="inline-block w-4" />;
 }
 
 function KeyLabel({
@@ -225,31 +234,3 @@ function Value({ node }: { node: PrimitiveNode }) {
   }
 }
 
-// Wraps each case-insensitive substring match of `needle` in <mark>. Empty
-// needle is a fast-path that returns the text unchanged.
-function highlight(text: string, needle: string): React.ReactNode {
-  if (!needle) return text;
-  const lower = text.toLowerCase();
-  const lowerNeedle = needle.toLowerCase();
-  const parts: React.ReactNode[] = [];
-  let i = 0;
-  let key = 0;
-  while (i < text.length) {
-    const idx = lower.indexOf(lowerNeedle, i);
-    if (idx === -1) {
-      parts.push(text.slice(i));
-      break;
-    }
-    if (idx > i) parts.push(text.slice(i, idx));
-    parts.push(
-      <mark
-        key={key++}
-        className="rounded-sm bg-yellow-200/70 px-0.5 dark:bg-yellow-600/40"
-      >
-        {text.slice(idx, idx + needle.length)}
-      </mark>,
-    );
-    i = idx + needle.length;
-  }
-  return parts;
-}

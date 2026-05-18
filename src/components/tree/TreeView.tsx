@@ -110,22 +110,52 @@ export function TreeView() {
   }
   return (
     <div className="flex h-full flex-col font-mono text-xs">
+      {parseError && <ParsePausedBanner error={parseError} />}
       <TreeSearch
         matchCount={matchIndices.length}
         currentMatch={currentMatch}
         onJump={handleJump}
       />
       <div className="min-h-0 flex-1">
-        <List
-          listRef={listRef}
-          rowComponent={VirtualRow}
-          rowCount={visibleRows.length}
-          rowHeight={ROW_HEIGHT}
-          rowProps={rowProps}
-          overscanCount={10}
-          style={{ height: '100%' }}
-        />
+        {query !== '' && visibleRows.length === 0 ? (
+          <NoMatches query={query} />
+        ) : (
+          <List
+            listRef={listRef}
+            rowComponent={VirtualRow}
+            rowCount={visibleRows.length}
+            rowHeight={ROW_HEIGHT}
+            rowProps={rowProps}
+            overscanCount={10}
+            style={{ height: '100%' }}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+// Shows when text is non-empty AND the latest parse failed BUT we still
+// have a previous-good flat array on display. Tells the user the tree
+// isn't tracking their current keystrokes — without it, the stale tree
+// looks like a non-reactive bug.
+function ParsePausedBanner({ error }: { error: ParseTreeError }) {
+  const where =
+    error.line !== undefined && error.col !== undefined
+      ? `line ${error.line}, col ${error.col}`
+      : error.message;
+  return (
+    <div className="border-b border-yellow-300/50 bg-yellow-100/60 px-3 py-1 text-[11px] text-yellow-900 dark:border-yellow-700/50 dark:bg-yellow-900/30 dark:text-yellow-200">
+      <span className="font-medium">Tree paused</span> — invalid JSON at{' '}
+      {where}. Showing last successful parse.
+    </div>
+  );
+}
+
+function NoMatches({ query }: { query: string }) {
+  return (
+    <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
+      No matches for &ldquo;{query}&rdquo;.
     </div>
   );
 }
