@@ -64,34 +64,19 @@ export function TreeView() {
     setCurrentMatch(0);
   }, [query]);
 
-  // Build the visible-rows array AND a flat-index → visible-index map in
-  // one pass. The map is needed so jump-to-match can call scrollToRow with
-  // the right list index (matchIndices are flat indices, the List speaks
-  // in visible-row positions).
-  const { visibleRows, flatToVisible } = useMemo(() => {
-    if (query) {
-      const rows: FlatRow[] = [];
-      const map = new Map<number, number>();
-      for (let i = 0; i < flat.length; i++) {
-        if (visibleSet.has(i)) {
-          map.set(i, rows.length);
-          rows.push(flat[i]);
-        }
-      }
-      return { visibleRows: rows, flatToVisible: map };
+  // Build the visible-rows array AND an id → visible-index map. Keying
+  // the map by `row.id` (a JSON path) is more robust than indexing by
+  // flat-array position with an identity match — a future refactor of
+  // `deriveVisible` to map/clone rows wouldn't silently break jump-to-match.
+  const { visibleRows, idToVisibleIdx } = useMemo(() => {
+    const rows: FlatRow[] = query
+      ? flat.filter((_, i) => visibleSet.has(i))
+      : deriveVisible(flat, closed);
+    const map = new Map<string, number>();
+    for (let i = 0; i < rows.length; i++) {
+      map.set(rows[i].id, i);
     }
-    // No query: fall back to the collapse-aware filter.
-    const rows = deriveVisible(flat, closed);
-    const map = new Map<number, number>();
-    // Identity match (deriveVisible returns references into `flat`).
-    let vi = 0;
-    for (let i = 0; i < flat.length; i++) {
-      if (rows[vi] === flat[i]) {
-        map.set(i, vi);
-        vi++;
-      }
-    }
-    return { visibleRows: rows, flatToVisible: map };
+    return { visibleRows: rows, idToVisibleIdx: map };
   }, [flat, closed, query, visibleSet]);
 
   // Memoized so react-window's internal prop-change detector doesn't
@@ -106,7 +91,7 @@ export function TreeView() {
         ? (currentMatch + 1) % matchIndices.length
         : (currentMatch - 1 + matchIndices.length) % matchIndices.length;
     setCurrentMatch(next);
-    const visibleIdx = flatToVisible.get(matchIndices[next]);
+    const visibleIdx = idToVisibleIdx.get(flat[matchIndices[next]].id);
     if (visibleIdx !== undefined) {
       listRef.current?.scrollToRow({ index: visibleIdx, align: 'smart' });
     }
