@@ -1,17 +1,10 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { ResizablePanes } from '@/components/layout/ResizablePanes';
-
-function EditorPlaceholder() {
-  return (
-    <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500 dark:text-neutral-400">
-      Editor pane — Monaco lands in W1 Tue
-    </div>
-  );
-}
+import { MonacoPane } from '@/components/editor/MonacoPane';
 
 function TreePlaceholder() {
   return (
-    <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500 dark:text-neutral-400">
+    <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-sm">
       Tree view — naive renderer in W1 Wed, virtualized in W2
     </div>
   );
@@ -20,7 +13,7 @@ function TreePlaceholder() {
 function App() {
   return (
     <AppShell>
-      <ResizablePanes left={<EditorPlaceholder />} right={<TreePlaceholder />} />
+      <ResizablePanes left={<MonacoPane />} right={<TreePlaceholder />} />
     </AppShell>
   );
 }
