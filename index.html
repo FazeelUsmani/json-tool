@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Title + meta description are injected per-route via vite-react-ssg's <Head>. -->
     <script src="/theme-init.js"></script>
+    <!-- Plausible analytics. Replace data-domain with the CF Pages preview
+         subdomain (e.g. "json-tool-xyz.pages.dev") after dashboard connect;
+         until then Plausible silently drops events as unknown property. -->
+    <script defer data-domain="REPLACE-WITH-CF-PAGES-SUBDOMAIN" src="https://plausible.io/js/script.js"></script>
   </head>
   <body>
     <div id="root"></div>
