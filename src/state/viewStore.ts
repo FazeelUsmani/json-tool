@@ -12,10 +12,16 @@
 //   const closed = useViewStore(s => s.closed);
 //   const visible = useMemo(() => deriveVisible(flat, closed), [flat, closed]);
 
+import { enableMapSet } from 'immer';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { flattenTree, type FlatRow } from '@/lib/tree/flatten';
 import type { TreeNode } from '@/lib/tree/parse';
+
+// Immer ships Map/Set support behind an opt-in plugin. `closed` is a Set,
+// and any toggle() call would throw inside the producer without this.
+// Idempotent — safe to call multiple times under HMR.
+enableMapSet();
 
 type ViewState = {
   flat: FlatRow[];
