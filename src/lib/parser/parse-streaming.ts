@@ -19,9 +19,11 @@
 //     object context, STRING tokens alternate key/value based on the
 //     frame's pendingKey state.
 
-import Tokenizer from '@streamparser/json/tokenizer';
-import TokenType from '@streamparser/json/utils/types/tokenType';
-import type { ParsedTokenInfo } from '@streamparser/json/utils/types/parsedTokenInfo';
+// Deep imports use .js so TypeScript resolves them through the package's
+// `./*` exports map (which only matches with the extension).
+import Tokenizer from '@streamparser/json/tokenizer.js';
+import TokenType from '@streamparser/json/utils/types/tokenType.js';
+import type { ParsedTokenInfo } from '@streamparser/json/utils/types/parsedTokenInfo.js';
 import type { TreeNode } from '@/lib/tree/parse';
 import {
   MAX_SPINE_DEPTH,
@@ -79,6 +81,12 @@ export type ParseOptions = {
   // returns whatever it has parsed so far (root may be null/partial).
   signal?: { aborted: boolean };
   totalBytes?: number;
+  // For stub expansion: re-parse a byte slice as if it were rooted at
+  // `basePath` instead of '$', with all reported byte offsets in the
+  // result shifted by `byteOffsetBase` so they point into the ORIGINAL
+  // file (not the slice). Defaults '$' / 0 — top-level parse uses these.
+  basePath?: string;
+  byteOffsetBase?: number;
 };
 
 export async function parseStreaming(
@@ -94,16 +102,20 @@ export async function parseStreaming(
   let parseError: ParseError | undefined;
   let halted = false; // set after onError; ignores further tokens
 
+  const basePath = opts.basePath ?? '$';
+  const byteOffsetBase = opts.byteOffsetBase ?? 0;
+
   // ----- helpers ----------------------------------------------------------
 
   const peek = (): Frame | null => stack[stack.length - 1] ?? null;
 
   // Path + key for the NEXT child the parent will attach. Reads (and for
   // objects, consumes via pendingKey) the parent's state. For the root
-  // (no parent), returns the canonical '$' path.
+  // (no parent), returns the basePath ('$' for top-level parse, the stub
+  // path for expansion).
   const nextChildIdentity = (): { key: string | null; path: string } => {
     const p = peek();
-    if (p === null) return { key: null, path: '$' };
+    if (p === null) return { key: null, path: basePath };
     if (p.kind === 'object') {
       // Tokenizer invariant: in an object frame, every value token is
       // preceded by a key STRING token that sets pendingKey. If pendingKey
@@ -153,7 +165,7 @@ export async function parseStreaming(
                 key: stub.key,
                 path: stub.path,
                 byteStart: stub.byteStart,
-                byteEnd: info.offset + 1,
+                byteEnd: info.offset + 1 + byteOffsetBase,
                 childCount:
                   stub.commaCount + (stub.hasElement ? 1 : 0),
               }
@@ -162,7 +174,7 @@ export async function parseStreaming(
                 key: stub.key,
                 path: stub.path,
                 byteStart: stub.byteStart,
-                byteEnd: info.offset + 1,
+                byteEnd: info.offset + 1 + byteOffsetBase,
                 childCount:
                   stub.commaCount + (stub.hasElement ? 1 : 0),
               };
@@ -189,7 +201,7 @@ export async function parseStreaming(
             kind: isObj ? 'stub-object' : 'stub-array',
             key,
             path,
-            byteStart: info.offset,
+            byteStart: info.offset + byteOffsetBase,
             depthAccum: 1,
             commaCount: 0,
             hasElement: false,
@@ -202,7 +214,7 @@ export async function parseStreaming(
                 key,
                 path,
                 children: [],
-                byteStart: info.offset,
+                byteStart: info.offset + byteOffsetBase,
                 pendingKey: null,
               }
             : {
@@ -210,7 +222,7 @@ export async function parseStreaming(
                 key,
                 path,
                 children: [],
-                byteStart: info.offset,
+                byteStart: info.offset + byteOffsetBase,
                 elementIndex: 0,
               };
           stack.push(frame);
@@ -228,7 +240,7 @@ export async function parseStreaming(
           return;
         }
         depth--;
-        const byteEnd = info.offset + 1;
+        const byteEnd = info.offset + 1 + byteOffsetBase;
         const node: TreeNode =
           frame.kind === 'object'
             ? {
@@ -368,7 +380,7 @@ export async function parseStreaming(
     if (!parseError && (stack.length > 0 || stub !== null)) {
       parseError = {
         message: 'Unexpected end of input: unclosed object or array',
-        byteOffset: bytesProcessed,
+        byteOffset: bytesProcessed + byteOffsetBase,
       };
     }
   } catch (err) {

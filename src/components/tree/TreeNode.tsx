@@ -127,9 +127,19 @@ function LeafRow({
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   const node = row.node;
-  if (node.kind === 'object' || node.kind === 'array') {
-    const openCh = node.kind === 'object' ? '{' : '[';
-    const closeCh = node.kind === 'object' ? '}' : ']';
+  if (
+    node.kind === 'object' ||
+    node.kind === 'array' ||
+    node.kind === 'stub-object' ||
+    node.kind === 'stub-array'
+  ) {
+    // Stubs render as empty composites for now — step 6 of the W3-Mon
+    // build adds proper stub UI (childCount pill + expand click). Until
+    // the worker is wired (step 5), stubs never reach this code at
+    // runtime, so the placeholder render is invisible.
+    const isObj = node.kind === 'object' || node.kind === 'stub-object';
+    const openCh = isObj ? '{' : '[';
+    const closeCh = isObj ? '}' : ']';
     return (
       <Row
         pad={pad(row.depth)}

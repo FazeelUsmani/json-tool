@@ -176,6 +176,62 @@ describe('parseStreaming — byte index', () => {
   });
 });
 
+describe('parseStreaming — expansion (basePath + byteOffsetBase)', () => {
+  test('rebases paths from basePath and shifts offsets by byteOffsetBase', async () => {
+    // Simulate expandStub on a stub at $.users[0] whose byteStart was 100
+    // in the original file. We feed only the subtree text to the parser
+    // and tell it where it came from.
+    const subtreeText = '{"name":"alice","tags":["x","y"]}';
+    const r = await parseStreaming(streamFromString(subtreeText), {
+      basePath: '$.users[0]',
+      byteOffsetBase: 100,
+    });
+    expect(r.parseError).toBeUndefined();
+    if (r.root?.kind !== 'object') throw new Error('unreachable');
+    // Root TreeNode adopts basePath; children paths cascade from it.
+    expect(r.root.path).toBe('$.users[0]');
+    expect(r.root.children[0].path).toBe('$.users[0].name');
+    expect(r.root.children[1].path).toBe('$.users[0].tags');
+    // Offsets in byteIndex are shifted into the ORIGINAL file's coordinate
+    // space (slice-relative + 100).
+    const rootEntry = r.byteIndex.find(([p]) => p === '$.users[0]');
+    expect(rootEntry).toBeDefined();
+    if (!rootEntry) throw new Error('unreachable');
+    const [, { byteStart, byteEnd }] = rootEntry;
+    expect(byteStart).toBe(100); // slice-offset 0 + base 100
+    expect(byteEnd).toBe(100 + subtreeText.length);
+  });
+
+  test('stubs inside expanded subtree carry rebased paths + shifted offsets', async () => {
+    // The subtree itself contains depth-3 stubs (depth 3 within the slice).
+    // Their paths should be under basePath; offsets in original-file
+    // coordinates.
+    const subtreeText = '{"a":{"b":{"c":{"deep":1}}}}';
+    const r = await parseStreaming(streamFromString(subtreeText), {
+      basePath: '$.users[0]',
+      byteOffsetBase: 1000,
+    });
+    if (r.root?.kind !== 'object') throw new Error('unreachable');
+    function find(n: TreeNode, p: string): TreeNode | undefined {
+      if (n.path === p) return n;
+      if (n.kind === 'object' || n.kind === 'array') {
+        for (const c of n.children) {
+          const m = find(c, p);
+          if (m) return m;
+        }
+      }
+      return undefined;
+    }
+    const stub = find(r.root, '$.users[0].a.b.c');
+    expect(stub?.kind).toBe('stub-object');
+    if (stub?.kind !== 'stub-object') throw new Error('unreachable');
+    // c is at slice-offset where `{"deep":1}` starts (after `{"a":{"b":{"c":`).
+    const sliceOffset = subtreeText.indexOf('{"deep":1}');
+    expect(stub.byteStart).toBe(sliceOffset + 1000);
+    expect(stub.byteEnd).toBe(sliceOffset + '{"deep":1}'.length + 1000);
+  });
+});
+
 describe('parseStreaming — error propagation (partial root)', () => {
   test('malformed JSON yields parseError + whatever spine was built', async () => {
     // Valid `{"a":1,` then garbage. Some token sequence runs before the
