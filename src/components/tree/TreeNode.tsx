@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Copy, Info } from 'lucide-react';
+import { Copy, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 import type { TreeNode as TreeNodeData } from '@/lib/tree/parse';
@@ -7,6 +7,7 @@ import type { FlatRow, ParentKind } from '@/lib/tree/flatten';
 import { copyText } from '@/lib/clipboard';
 import { highlight } from '@/lib/tree/highlight';
 import { useViewStore } from '@/state/viewStore';
+import { useStubExpansion } from '@/state/useStubExpansion';
 
 type PrimitiveNode = Extract<
   TreeNodeData,
@@ -128,14 +129,16 @@ function StubRow({
   row: Extract<FlatRow, { kind: 'stub' }>;
   flatIdx: number;
 }) {
-  const { query, openDrawer, setFocusedIndex } = useViewStore(
+  const { query, openDrawer, setFocusedIndex, isExpanding } = useViewStore(
     useShallow((s) => ({
       query: s.query,
       openDrawer: s.openDrawer,
       setFocusedIndex: s.setFocusedIndex,
+      isExpanding: s.expandingPaths.has(row.id),
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const expand = useStubExpansion();
   const node = row.node;
   const isObj = node.kind === 'stub-object';
   const openCh = isObj ? '{' : '[';
@@ -146,13 +149,18 @@ function StubRow({
       path={row.id}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
+      onToggle={isExpanding ? undefined : () => void expand(row)}
       onShowDetail={() => openDrawer(row)}
     >
       <Caret open={false} />
       <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
       <span>{openCh}</span>
       <span className="text-muted-foreground"> … {closeCh}</span>
-      <StubCountPill count={node.childCount} kind={node.kind} />
+      {isExpanding ? (
+        <Loader2 className="text-muted-foreground ml-1 size-3 animate-spin" />
+      ) : (
+        <StubCountPill count={node.childCount} kind={node.kind} />
+      )}
     </Row>
   );
 }

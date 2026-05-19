@@ -11,6 +11,17 @@
 //   const flat = useViewStore(s => s.flat);
 //   const closed = useViewStore(s => s.closed);
 //   const visible = useMemo(() => deriveVisible(flat, closed), [flat, closed]);
+//
+// W3-Mon added `root` (the TreeNode tree backing `flat` — needed by
+// splice on stub expansion), `expandingPaths` (in-flight expansions for
+// spinner display), and `sourceBlob` (the Blob backing the current parse
+// — needed by parserHost.expandStub to re-slice byte ranges).
+//
+// Tipping-point note: viewStore now mixes view state (flat, closed,
+// focus, drawer, query) with parser-session state (root, sourceBlob,
+// expandingPaths). If anything else parser-input-shaped lands (parse
+// options, format detection, NDJSON cursor), split parser fields into a
+// dedicated `parserSession` store rather than growing this one further.
 
 import { enableMapSet } from 'immer';
 import { create } from 'zustand';
@@ -30,6 +41,10 @@ enableMapSet();
 
 type ViewState = {
   flat: FlatRow[];
+  // The TreeNode tree backing `flat`. Held alongside the flat array so
+  // stub expansion can splice a materialized subtree into it without
+  // reconstructing from FlatRows (lossy round-trip).
+  root: TreeNode | null;
   closed: Set<string>;
   // Empty string when no search is active. The (b) visibility rule treats
   // closed as ignored during search — see search.ts.
@@ -38,8 +53,16 @@ type ViewState = {
   // read it.
   focusedIndex: number | null;
   // The row currently shown in the detail drawer. Null when the drawer is
-  // closed. Holds the FlatRow by reference; reset on every reparse.
+  // closed. Re-resolved by id on each reparse.
   drawerFor: FlatRow | null;
+  // Paths of stubs currently being expanded via parserHost.expandStub.
+  // StubRow reads membership to show a spinner; ESC reads non-empty to
+  // route abort to the worker.
+  expandingPaths: Set<string>;
+  // Source Blob for the most recent streaming parse. parserHost.expandStub
+  // re-slices this on stub click. Null when nothing parsed yet OR when
+  // running via the sync (?streaming=0) path.
+  sourceBlob: Blob | null;
 };
 
 type ViewActions = {
@@ -49,15 +72,20 @@ type ViewActions = {
   setFocusedIndex: (index: number | null) => void;
   openDrawer: (row: FlatRow) => void;
   closeDrawer: () => void;
+  setExpanding: (path: string, value: boolean) => void;
+  setSourceBlob: (blob: Blob | null) => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
   immer((set) => ({
     flat: [],
+    root: null,
     closed: new Set<string>(),
     query: '',
     focusedIndex: null,
     drawerFor: null,
+    expandingPaths: new Set<string>(),
+    sourceBlob: null,
     setRoot: (root) =>
       set((state) => {
         const newFlat = root === null ? [] : flattenTree(root);
@@ -68,6 +96,7 @@ export const useViewStore = create<ViewState & ViewActions>()(
             : null;
         const oldDrawerId = state.drawerFor?.id ?? null;
         state.flat = newFlat;
+        state.root = root;
         if (oldFocusedId !== null) {
           const idx = newFlat.findIndex((r) => r.id === oldFocusedId);
           state.focusedIndex = idx >= 0 ? idx : null;
@@ -104,6 +133,15 @@ export const useViewStore = create<ViewState & ViewActions>()(
     closeDrawer: () =>
       set((state) => {
         state.drawerFor = null;
+      }),
+    setExpanding: (path, value) =>
+      set((state) => {
+        if (value) state.expandingPaths.add(path);
+        else state.expandingPaths.delete(path);
+      }),
+    setSourceBlob: (blob) =>
+      set((state) => {
+        state.sourceBlob = blob;
       }),
   })),
 );

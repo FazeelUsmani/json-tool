@@ -9,6 +9,7 @@ import {
 import { type FlatRow } from '@/lib/tree/flatten';
 import { findMatches } from '@/lib/tree/search';
 import { parseFile as parseFileStreaming } from '@/state/parserHost';
+import { useStubExpansion } from '@/state/useStubExpansion';
 import { TreeNode } from './TreeNode';
 import { TreeSearch } from './TreeSearch';
 import { Breadcrumb } from './Breadcrumb';
@@ -44,6 +45,10 @@ export function TreeView() {
   const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
   const toggle = useViewStore((s) => s.toggle);
   const openDrawer = useViewStore((s) => s.openDrawer);
+  const setSourceBlob = useViewStore((s) => s.setSourceBlob);
+  const expandingPaths = useViewStore((s) => s.expandingPaths);
+  const setExpanding = useViewStore((s) => s.setExpanding);
+  const expandStubRow = useStubExpansion();
   const [parseError, setParseError] = useState<ParseTreeError | null>(null);
   const [currentMatch, setCurrentMatch] = useState(0);
   const listRef = useListRef(null);
@@ -71,6 +76,10 @@ export function TreeView() {
       let cancelled = false;
       const handle = setTimeout(() => {
         const blob = new Blob([text], { type: 'application/json' });
+        // Retain the blob in viewStore so expandStub can re-slice byte
+        // ranges later. Stored BEFORE the parse Promise resolves so a
+        // stub click that races the parse can still see a source.
+        setSourceBlob(blob);
         parseFileStreaming(blob)
           .then((result) => {
             if (cancelled) return;
@@ -204,6 +213,9 @@ export function TreeView() {
     setQuery,
     openDrawer,
     containerRef,
+    expandStubRow,
+    expandingPaths,
+    clearExpanding: (path) => setExpanding(path, false),
   });
 
   if (text.trim() === '') {

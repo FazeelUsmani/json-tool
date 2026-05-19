@@ -2,6 +2,7 @@ import type { KeyboardEvent, RefObject } from 'react';
 import { toast } from 'sonner';
 import type { FlatRow } from '@/lib/tree/flatten';
 import { copyText } from '@/lib/clipboard';
+import { abort as abortParser } from '@/state/parserHost';
 
 // PageUp/PageDown jump distance in visible rows. Tuned to roughly match
 // one screenful at ROW_HEIGHT=24 in the default pane size; not pixel-perfect
@@ -20,6 +21,11 @@ type Args = {
   setQuery: (query: string) => void;
   openDrawer: (row: FlatRow) => void;
   containerRef: RefObject<HTMLDivElement | null>;
+  // W3-Mon stub expansion: → / Enter on a stub row triggers expansion;
+  // ESC during expansion aborts and clears the pending paths.
+  expandStubRow: (row: Extract<FlatRow, { kind: 'stub' }>) => void;
+  expandingPaths: Set<string>;
+  clearExpanding: (path: string) => void;
 };
 
 // All keyboard nav for the tree pane: arrows (with PageUp/Down and Home/End),
@@ -41,6 +47,9 @@ export function useTreeKeyboardNav({
   setQuery,
   openDrawer,
   containerRef,
+  expandStubRow,
+  expandingPaths,
+  clearExpanding,
 }: Args) {
   const moveFocus = (delta: number) => {
     if (visibleFlatIdx.length === 0) return;
@@ -77,6 +86,14 @@ export function useTreeKeyboardNav({
   const handleArrowRight = () => {
     if (focusedIndex === null) return;
     const row = flat[focusedIndex];
+    if (row.kind === 'stub') {
+      // Mirrors → on a collapsed composite: trigger expansion. Focus stays
+      // on the stub row; user presses → again after materialization to
+      // descend into the first child (keeps the "→ to expand, → to enter"
+      // mental model consistent across spine + stub composites).
+      if (!expandingPaths.has(row.id)) expandStubRow(row);
+      return;
+    }
     if (row.kind !== 'open') return;
     if (closed.has(row.id)) {
       toggle(row.id);
@@ -98,6 +115,11 @@ export function useTreeKeyboardNav({
     const row = flat[focusedIndex];
     if (row.kind === 'open') {
       toggle(row.id);
+    } else if (row.kind === 'stub') {
+      // Enter on a stub triggers expansion. Drawer is NOT opened — the
+      // drawer's "Expand subtree" button is the alt path, and opening
+      // both would just duplicate the request.
+      if (!expandingPaths.has(row.id)) expandStubRow(row);
     } else if (row.kind === 'leaf') {
       openDrawer(row);
     }
@@ -158,7 +180,13 @@ export function useTreeKeyboardNav({
         handleEnter();
         break;
       case 'Escape':
-        if (query !== '') {
+        if (expandingPaths.size > 0) {
+          // Cancel any in-flight stub expansion. The useStubExpansion hook
+          // detects an aborted call by checking `expandingPaths.has(id)`
+          // after the await returns — clearing them here is the signal.
+          for (const path of expandingPaths) clearExpanding(path);
+          abortParser();
+        } else if (query !== '') {
           setQuery('');
         } else {
           containerRef.current?.blur();

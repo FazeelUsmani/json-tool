@@ -1,4 +1,4 @@
-import { Copy } from 'lucide-react';
+import { Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Sheet,
@@ -7,11 +7,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { copyText } from '@/lib/clipboard';
 import { reconstructJson } from '@/lib/tree/subtree';
 import type { FlatRow } from '@/lib/tree/flatten';
 import type { TreeNode } from '@/lib/tree/parse';
 import { useViewStore } from '@/state/viewStore';
+import { useStubExpansion } from '@/state/useStubExpansion';
 
 // Right-side drawer showing details for one tree row. Triggered by:
 //   - clicking the Info icon on a row
@@ -80,9 +82,7 @@ function Body({ row }: { row: FlatRow }) {
         <CompositeBody node={node} />
       )}
 
-      {(node.kind === 'stub-object' || node.kind === 'stub-array') && (
-        <StubBody node={node} />
-      )}
+      {row.kind === 'stub' && <StubBody row={row} />}
     </div>
   );
 }
@@ -129,19 +129,37 @@ function PrimitiveBody({ node }: { node: TreeNode }) {
   );
 }
 
-function StubBody({ node }: { node: TreeNode }) {
-  if (node.kind !== 'stub-object' && node.kind !== 'stub-array') return null;
+function StubBody({ row }: { row: Extract<FlatRow, { kind: 'stub' }> }) {
+  const isExpanding = useViewStore((s) => s.expandingPaths.has(row.id));
+  const expand = useStubExpansion();
+  const node = row.node;
   const childLabel =
-    node.kind === 'stub-array' ? `${node.childCount} items` : `${node.childCount} keys`;
+    node.kind === 'stub-array'
+      ? `${node.childCount} items`
+      : `${node.childCount} keys`;
   return (
     <>
       <Section label="Children">
         <span className="text-muted-foreground text-xs">{childLabel}</span>
       </Section>
       <Section label="Subtree">
-        <div className="text-muted-foreground rounded border border-dashed p-3 text-xs">
-          Expand the row in the tree to load this subtree.
-        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={isExpanding}
+          onClick={() => void expand(row)}
+          className="w-full"
+        >
+          {isExpanding ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              Expanding…
+            </>
+          ) : (
+            'Expand subtree'
+          )}
+        </Button>
       </Section>
     </>
   );
