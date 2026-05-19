@@ -11,7 +11,28 @@ export type TreeNode =
   | { kind: 'string'; key: string | null; path: string; value: string }
   | { kind: 'number'; key: string | null; path: string; value: number }
   | { kind: 'boolean'; key: string | null; path: string; value: boolean }
-  | { kind: 'null'; key: string | null; path: string };
+  | { kind: 'null'; key: string | null; path: string }
+  // W3-Mon: stub variants for the streaming spine parser. Emitted when the
+  // parser encounters a composite at depth >= MAX_SPINE_DEPTH; the subtree
+  // is not materialized until the user expands it. byteStart/byteEnd point
+  // into the original file so expansion can re-tokenize just that range.
+  // parseToTree never emits these — they originate from parse-streaming.ts.
+  | {
+      kind: 'stub-object';
+      key: string | null;
+      path: string;
+      byteStart: number;
+      byteEnd: number;
+      childCount: number;
+    }
+  | {
+      kind: 'stub-array';
+      key: string | null;
+      path: string;
+      byteStart: number;
+      byteEnd: number;
+      childCount: number;
+    };
 
 export type ParseTreeResult =
   | { ok: true; root: TreeNode }
