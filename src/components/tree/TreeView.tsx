@@ -8,6 +8,7 @@ import {
 } from '@/lib/tree/parse';
 import { type FlatRow } from '@/lib/tree/flatten';
 import { findMatches } from '@/lib/tree/search';
+import { parseFile as parseFileStreaming } from '@/state/parserHost';
 import { TreeNode } from './TreeNode';
 import { TreeSearch } from './TreeSearch';
 import { Breadcrumb } from './Breadcrumb';
@@ -48,12 +49,54 @@ export function TreeView() {
   const listRef = useListRef(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // W3-Mon opt-in: `?streaming=1` routes the parse through the worker-
+  // backed streaming spine parser instead of the synchronous parseToTree.
+  // Read once at mount; URL changes mid-session won't flip the path (the
+  // user can reload). The default path stays sync so a worker bug doesn't
+  // break the existing flow. Flag removed in W3-Wed once streaming is
+  // ready to be default.
+  const streamingEnabled = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('streaming') === '1';
+  }, []);
+
   useEffect(() => {
     if (text.trim() === '') {
       setRoot(null);
       setParseError(null);
       return;
     }
+
+    if (streamingEnabled) {
+      let cancelled = false;
+      const handle = setTimeout(() => {
+        const blob = new Blob([text], { type: 'application/json' });
+        parseFileStreaming(blob)
+          .then((result) => {
+            if (cancelled) return;
+            setRoot(result.root);
+            if (result.parseError) {
+              setParseError({
+                message: result.parseError.message,
+                line: result.parseError.line,
+                col: result.parseError.col,
+              });
+            } else {
+              setParseError(null);
+            }
+          })
+          .catch(() => {
+            // Worker termination on rapid re-parse rejects the prior
+            // Promise. That's the cancel path — don't surface it as a
+            // user-visible error.
+          });
+      }, PARSE_DEBOUNCE_MS);
+      return () => {
+        cancelled = true;
+        clearTimeout(handle);
+      };
+    }
+
     const handle = setTimeout(() => {
       const result = parseToTree(text);
       if (result.ok) {
@@ -64,7 +107,7 @@ export function TreeView() {
       }
     }, PARSE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [text, setRoot]);
+  }, [text, setRoot, streamingEnabled]);
 
   const { matchIndices, visibleSet } = useMemo(
     () => findMatches(flat, query),

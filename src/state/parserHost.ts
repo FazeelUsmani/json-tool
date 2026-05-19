@@ -46,7 +46,7 @@ function terminateWorker() {
 }
 
 export async function parseFile(
-  file: File,
+  file: Blob,
   onProgress?: (p: ParseProgress) => void,
 ): Promise<ParseResult> {
   // Force-terminate any in-flight parse before starting a new one. The
@@ -58,7 +58,7 @@ export async function parseFile(
 }
 
 export async function expandStub(
-  file: File,
+  file: Blob,
   byteStart: number,
   byteEnd: number,
   basePath: string,

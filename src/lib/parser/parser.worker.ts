@@ -14,8 +14,12 @@ import type { ParseProgress, ParseResult } from './parser-types';
 let abortFlag: { aborted: boolean } = { aborted: false };
 
 const api = {
+  // Accepts any Blob (which includes File). Text input synthesizes a Blob
+  // via `new Blob([text])` on the main side; drag-dropped files arrive as
+  // File. Both round-trip through Comlink's structured clone and expose
+  // .stream() + .size identically.
   async parseFile(
-    file: File,
+    file: Blob,
     onProgress: (p: ParseProgress) => void,
   ): Promise<ParseResult> {
     abortFlag = { aborted: false };
@@ -31,7 +35,7 @@ const api = {
   // file coordinates. The result's root TreeNode REPLACES the stub at
   // basePath in the main thread's tree.
   async expandStub(
-    file: File,
+    file: Blob,
     byteStart: number,
     byteEnd: number,
     basePath: string,
