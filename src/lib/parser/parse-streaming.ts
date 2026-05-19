@@ -32,6 +32,7 @@ import {
   type ParseProgress,
   type ParseResult,
 } from './parser-types';
+import { sampleByteIndex, type SamplingOptions } from './sample-index';
 
 // Spine frame on the stack. The STRING-as-key vs STRING-as-value
 // disambiguation reads `peek().kind` directly — the current frame's own
@@ -87,6 +88,10 @@ export type ParseOptions = {
   // file (not the slice). Defaults '$' / 0 — top-level parse uses these.
   basePath?: string;
   byteOffsetBase?: number;
+  // byteIndex stub sampling. Defaults to threshold=1000, n=100. Pass
+  // { threshold: Infinity } to disable for callers that need the full
+  // index (e.g., the dormant-reverse-lookup work when it lands).
+  sampling?: SamplingOptions;
 };
 
 export async function parseStreaming(
@@ -96,6 +101,12 @@ export async function parseStreaming(
   const tokenizer = new Tokenizer();
   const stack: Frame[] = [];
   const byteIndex: ByteIndexEntry[] = [];
+  // Per-array child counts collected during parse — fed to sampleByteIndex
+  // after the parse finishes so we can drop redundant stub entries when
+  // an enclosing array is large. Spine arrays populate on close (real
+  // children.length); stub-arrays populate at the same moment from the
+  // tracked childCount.
+  const arrayLengths = new Map<string, number>();
   let stub: StubState | null = null;
   let depth = 0;
   let root: TreeNode | null = null;
@@ -158,6 +169,7 @@ export async function parseStreaming(
       // The stub may have closed during this token; if so, materialize it
       // and exit stub mode.
       if (stub.depthAccum === 0) {
+        const childCount = stub.commaCount + (stub.hasElement ? 1 : 0);
         const stubNode: TreeNode =
           stub.kind === 'stub-object'
             ? {
@@ -166,8 +178,7 @@ export async function parseStreaming(
                 path: stub.path,
                 byteStart: stub.byteStart,
                 byteEnd: info.offset + 1 + byteOffsetBase,
-                childCount:
-                  stub.commaCount + (stub.hasElement ? 1 : 0),
+                childCount,
               }
             : {
                 kind: 'stub-array',
@@ -175,13 +186,15 @@ export async function parseStreaming(
                 path: stub.path,
                 byteStart: stub.byteStart,
                 byteEnd: info.offset + 1 + byteOffsetBase,
-                childCount:
-                  stub.commaCount + (stub.hasElement ? 1 : 0),
+                childCount,
               };
         byteIndex.push([
           stubNode.path,
           { byteStart: stubNode.byteStart, byteEnd: stubNode.byteEnd },
         ]);
+        if (stub.kind === 'stub-array') {
+          arrayLengths.set(stub.path, childCount);
+        }
         attach(stubNode);
         depth--;
         stub = null;
@@ -259,6 +272,9 @@ export async function parseStreaming(
           node.path,
           { byteStart: frame.byteStart, byteEnd },
         ]);
+        if (frame.kind === 'array') {
+          arrayLengths.set(frame.path, frame.children.length);
+        }
         attach(node);
         break;
       }
@@ -430,7 +446,12 @@ export async function parseStreaming(
     }
   }
 
-  return { root, byteIndex, parseError };
+  // Post-parse: sample the byteIndex to keep it bounded at scale. Stub
+  // TreeNodes carry their own byteStart/byteEnd inline and are untouched —
+  // only the path→range index is thinned. See sample-index.ts for rule.
+  const sampledIndex = sampleByteIndex(byteIndex, arrayLengths, opts.sampling);
+
+  return { root, byteIndex: sampledIndex, parseError };
 }
 
 // Convenience: parse from an in-memory string (vitest, small inputs). Wraps

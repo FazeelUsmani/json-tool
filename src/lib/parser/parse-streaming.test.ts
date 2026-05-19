@@ -163,6 +163,60 @@ describe('parseStreaming — byte index', () => {
     expect(paths.has('$.outer.mid.deep')).toBe(true); // stub
   });
 
+  test('stub TreeNodes keep inline byteStart/byteEnd after sampling drops their byteIndex entry', async () => {
+    // events array at depth 1 → its children (events) are at depth 2,
+    // materialized as spine. Each event's `.user` is at depth 3 → stub.
+    // 200 elements + threshold=100/n=100 means every event's byteIndex
+    // entries get sampled (K=0 and K=100 kept; rest dropped).
+    const events = Array.from({ length: 200 }, (_, i) => ({
+      id: i,
+      user: { name: `u${i}` },
+    }));
+    const text = JSON.stringify({ events });
+    const r = await parseStreaming(streamFromString(text), {
+      sampling: { threshold: 100, n: 100 },
+    });
+    expect(r.parseError).toBeUndefined();
+
+    function find(
+      n: NonNullable<typeof r.root>,
+      target: string,
+    ): TreeNode | undefined {
+      if (n.path === target) return n;
+      if (n.kind === 'object' || n.kind === 'array') {
+        for (const c of n.children) {
+          const m = find(c, target);
+          if (m) return m;
+        }
+      }
+      return undefined;
+    }
+
+    // events[37] is sampled OUT of byteIndex but its TreeNode is still
+    // fully materialized in the spine.
+    const event37 = find(r.root!, '$.events[37]');
+    if (event37?.kind !== 'object') throw new Error('unreachable');
+    const userStub = event37.children.find((c) => c.key === 'user');
+    if (userStub?.kind !== 'stub-object') throw new Error('unreachable');
+
+    // Crucial invariant: even though this stub's path was dropped from
+    // byteIndex by sampling, the TreeNode itself still carries valid
+    // byte ranges. Step 7's expansion reads these inline — sampling must
+    // never touch them.
+    expect(userStub.byteStart).toBeGreaterThan(0);
+    expect(userStub.byteEnd).toBeGreaterThan(userStub.byteStart);
+    const bytes = new TextEncoder().encode(text);
+    const slice = bytes.subarray(userStub.byteStart, userStub.byteEnd);
+    expect(JSON.parse(new TextDecoder().decode(slice))).toEqual({
+      name: 'u37',
+    });
+
+    // Sampling-side sanity: K=37 dropped, K=100 kept.
+    const idxPaths = new Set(r.byteIndex.map(([p]) => p));
+    expect(idxPaths.has('$.events[37].user')).toBe(false);
+    expect(idxPaths.has('$.events[100].user')).toBe(true);
+  });
+
   test('byteIndex ranges round-trip via JSON.parse', async () => {
     const text = '{"x":{"y":{"z":{"k":1}}}}';
     const r = await parse(text);
