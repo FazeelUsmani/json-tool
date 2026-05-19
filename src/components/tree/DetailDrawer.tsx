@@ -79,6 +79,10 @@ function Body({ row }: { row: FlatRow }) {
       {(node.kind === 'object' || node.kind === 'array') && (
         <CompositeBody node={node} />
       )}
+
+      {(node.kind === 'stub-object' || node.kind === 'stub-array') && (
+        <StubBody node={node} />
+      )}
     </div>
   );
 }
@@ -122,6 +126,24 @@ function PrimitiveBody({ node }: { node: TreeNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+function StubBody({ node }: { node: TreeNode }) {
+  if (node.kind !== 'stub-object' && node.kind !== 'stub-array') return null;
+  const childLabel =
+    node.kind === 'stub-array' ? `${node.childCount} items` : `${node.childCount} keys`;
+  return (
+    <>
+      <Section label="Children">
+        <span className="text-muted-foreground text-xs">{childLabel}</span>
+      </Section>
+      <Section label="Subtree">
+        <div className="text-muted-foreground rounded border border-dashed p-3 text-xs">
+          Expand the row in the tree to load this subtree.
+        </div>
+      </Section>
+    </>
   );
 }
 
@@ -176,7 +198,7 @@ function isPrimitive(node: TreeNode): boolean {
 }
 
 function nodeTypeLabel(node: TreeNode): string {
-  if (node.kind === 'object') return 'object';
-  if (node.kind === 'array') return 'array';
+  if (node.kind === 'object' || node.kind === 'stub-object') return 'object';
+  if (node.kind === 'array' || node.kind === 'stub-array') return 'array';
   return node.kind;
 }

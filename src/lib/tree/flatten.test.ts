@@ -71,6 +71,34 @@ describe('flattenTree', () => {
     expect(flat[0]).toMatchObject({ kind: 'leaf', id: '$', parentIndex: -1 });
   });
 
+  test('stub TreeNodes flatten to a single stub row (no open/close pair)', () => {
+    // Construct a TreeNode directly because parseToTree never emits stubs.
+    // Real stubs come from parse-streaming at depth >= MAX_SPINE_DEPTH.
+    const root: TreeNode = {
+      kind: 'object',
+      key: null,
+      path: '$',
+      children: [
+        {
+          kind: 'stub-object',
+          key: 'big',
+          path: '$.big',
+          byteStart: 10,
+          byteEnd: 200,
+          childCount: 42,
+        },
+      ],
+    };
+    const flat = flattenTree(root);
+    expect(flat.map((r) => r.kind)).toEqual(['open', 'stub', 'close']);
+    expect(flat[1]).toMatchObject({
+      kind: 'stub',
+      id: '$.big',
+      depth: 1,
+      parentIndex: 0,
+    });
+  });
+
   test('paths stay identical across reparses of unrelated edits', () => {
     // Headline W2-Mon property: viewStore's `closed` Set is keyed by these
     // path IDs and must survive edits that don't touch a given subtree.

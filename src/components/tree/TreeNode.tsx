@@ -13,6 +13,10 @@ type PrimitiveNode = Extract<
   { kind: 'string' | 'number' | 'boolean' | 'null' }
 >;
 type CompositeNode = Extract<TreeNodeData, { kind: 'object' | 'array' }>;
+type StubNode = Extract<
+  TreeNodeData,
+  { kind: 'stub-object' | 'stub-array' }
+>;
 
 // Renders ONE row given a FlatRow + its absolute flat index. The flatIdx is
 // what viewStore.focusedIndex stores; passing it down avoids per-row store
@@ -30,6 +34,7 @@ export const TreeNode = memo(function TreeNode({
 }) {
   if (row.kind === 'open') return <OpenRow row={row} flatIdx={flatIdx} />;
   if (row.kind === 'close') return <CloseRow row={row} flatIdx={flatIdx} />;
+  if (row.kind === 'stub') return <StubRow row={row} flatIdx={flatIdx} />;
   return <LeafRow row={row} flatIdx={flatIdx} />;
 });
 
@@ -111,6 +116,47 @@ function CloseRow({
   );
 }
 
+// Renders a depth-3+ composite that hasn't been materialized yet. Visually
+// matches OpenRow's collapsed state — caret + key + bracketed-elide + count
+// pill — but has no toggle handler. Step 7 wires click-to-expand via
+// parserHost.expandStub; until then the row is focusable / copyable /
+// drawer-openable but inert otherwise.
+function StubRow({
+  row,
+  flatIdx,
+}: {
+  row: Extract<FlatRow, { kind: 'stub' }>;
+  flatIdx: number;
+}) {
+  const { query, openDrawer, setFocusedIndex } = useViewStore(
+    useShallow((s) => ({
+      query: s.query,
+      openDrawer: s.openDrawer,
+      setFocusedIndex: s.setFocusedIndex,
+    })),
+  );
+  const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const node = row.node;
+  const isObj = node.kind === 'stub-object';
+  const openCh = isObj ? '{' : '[';
+  const closeCh = isObj ? '}' : ']';
+  return (
+    <Row
+      pad={pad(row.depth)}
+      path={row.id}
+      isFocused={isFocused}
+      onFocus={() => setFocusedIndex(flatIdx)}
+      onShowDetail={() => openDrawer(row)}
+    >
+      <Caret open={false} />
+      <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
+      <span>{openCh}</span>
+      <span className="text-muted-foreground"> … {closeCh}</span>
+      <StubCountPill count={node.childCount} kind={node.kind} />
+    </Row>
+  );
+}
+
 function LeafRow({
   row,
   flatIdx,
@@ -127,17 +173,8 @@ function LeafRow({
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   const node = row.node;
-  if (
-    node.kind === 'object' ||
-    node.kind === 'array' ||
-    node.kind === 'stub-object' ||
-    node.kind === 'stub-array'
-  ) {
-    // Stubs render as empty composites for now — step 6 of the W3-Mon
-    // build adds proper stub UI (childCount pill + expand click). Until
-    // the worker is wired (step 5), stubs never reach this code at
-    // runtime, so the placeholder render is invisible.
-    const isObj = node.kind === 'object' || node.kind === 'stub-object';
+  if (node.kind === 'object' || node.kind === 'array') {
+    const isObj = node.kind === 'object';
     const openCh = isObj ? '{' : '[';
     const closeCh = isObj ? '}' : ']';
     return (
@@ -318,6 +355,20 @@ function CountPill({
   return (
     <span className="text-muted-foreground bg-muted/40 ml-1 inline-block rounded px-1 py-px font-mono text-[10px]">
       {kind === 'array' ? `[${count}]` : `{${count}}`}
+    </span>
+  );
+}
+
+function StubCountPill({
+  count,
+  kind,
+}: {
+  count: number;
+  kind: StubNode['kind'];
+}) {
+  return (
+    <span className="text-muted-foreground bg-muted/40 ml-1 inline-block rounded px-1 py-px font-mono text-[10px]">
+      {kind === 'stub-array' ? `[${count}]` : `{${count}}`}
     </span>
   );
 }

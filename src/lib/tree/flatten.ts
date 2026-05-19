@@ -14,6 +14,7 @@
 import type { TreeNode } from './parse';
 
 type CompositeNode = Extract<TreeNode, { kind: 'object' | 'array' }>;
+type StubNode = Extract<TreeNode, { kind: 'stub-object' | 'stub-array' }>;
 
 export type ParentKind = 'object' | 'array' | 'root';
 
@@ -37,7 +38,22 @@ export type FlatRow =
       kind: 'leaf';
       id: string;
       depth: number;
-      node: TreeNode;
+      // Stubs route to the 'stub' row type below, never to leaf — narrow
+      // the type so downstream switches don't have to re-check for stubs.
+      node: Exclude<TreeNode, StubNode>;
+      parentKind: ParentKind;
+      parentIndex: number;
+    }
+  // Stubs from the W3 streaming parser: composite values at depth >=
+  // MAX_SPINE_DEPTH that haven't been materialized yet. One flat row per
+  // stub (no open/close pair) — renders as a collapsed composite with a
+  // childCount pill. Step 7 wires click-to-expand; until then they're
+  // visually present but inert.
+  | {
+      kind: 'stub';
+      id: string;
+      depth: number;
+      node: StubNode;
       parentKind: ParentKind;
       parentIndex: number;
     };
@@ -55,6 +71,17 @@ function walk(
   parentIndex: number,
   out: FlatRow[],
 ): void {
+  if (node.kind === 'stub-object' || node.kind === 'stub-array') {
+    out.push({
+      kind: 'stub',
+      id: node.path,
+      depth,
+      node,
+      parentKind,
+      parentIndex,
+    });
+    return;
+  }
   if (node.kind === 'object' || node.kind === 'array') {
     if (node.children.length === 0) {
       // Empty `{}` / `[]` renders as one row, no open/close pair.
