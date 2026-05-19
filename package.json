@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "spike": "vite --open /spikes/",
     "bench:gen": "node benchmarks/generate.mjs",
-    "gen:100k": "node benchmarks/dev-fixture.mjs",
+    "bench:gen:all-dev": "node benchmarks/generate.mjs --all-dev",
+    "gen:100k": "node benchmarks/generate.mjs --shape flat-array --size 100000",
     "test": "vitest",
     "test:run": "vitest run"
   },
