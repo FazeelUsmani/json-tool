@@ -1,11 +1,11 @@
 // Substring search over a flat row array.
 //
-// W2-Wed: filter mode. Visible-during-search = matches + every ancestor on
-// the parentIndex chain + close rows whose open is visible. The viewStore's
-// `closed` Set is ignored while a query is active — that's the user-approved
-// (b) interaction: searching should never appear to "find nothing" because
-// the match was hidden inside a collapsed subtree. Clearing the query
-// restores the collapse state.
+// Returns: matches + every ancestor on the parentIndex chain + (for a
+// matched open row) every descendant + close rows whose open is visible.
+// The output is independent of the viewStore's `closed` Set — the consumer
+// (TreeView) intersects this visibleSet with the collapse state. Closed
+// subtrees stay collapsed during search; matches inside them are counted
+// but rendered only after the user expands the parent.
 //
 // Match target: keys + string/number/bool values. `null` skipped. Close rows
 // don't match (no semantic content).
@@ -34,6 +34,18 @@ export function findMatches(flat: FlatRow[], query: string): SearchResult {
     while (p >= 0 && !visibleSet.has(p)) {
       visibleSet.add(p);
       p = flat[p].parentIndex;
+    }
+    // If the match is on a composite open row, include its entire subtree.
+    // Without this, searching "meta" on {"meta":{...}} shows
+    // `▾ "meta": { … }` with no contents, which looks like the search
+    // found nothing inside. Cost: a top-level key match on a 100k-element
+    // array puts the whole tree in visibleSet — fine for react-window's
+    // virtualized rendering.
+    if (flat[i].kind === 'open') {
+      for (let j = i + 1; j < flat.length; j++) {
+        visibleSet.add(j);
+        if (flat[j].kind === 'close' && flat[j].parentIndex === i) break;
+      }
     }
   }
 

@@ -91,4 +91,23 @@ describe('findMatches', () => {
     expect(r.visibleSet.has(3)).toBe(true);
     expect(r.visibleSet.has(4)).toBe(true);
   });
+
+  test('match on composite open row pulls in its entire subtree', () => {
+    // 0:$ open, 1:$.meta open, 2:$.meta.tags open, 3:$.meta.tags[0] leaf,
+    // 4:$.meta.tags close, 5:$.meta.score leaf, 6:$.meta close, 7:$ close
+    const f = flat('{"meta":{"tags":["a"],"score":1}}');
+    const r = findMatches(f, 'meta');
+    expect(r.matchIndices).toEqual([1]);
+    // Without the descendant walk visibleSet would be {0, 1, 6, 7} — the
+    // user would see `▾ "meta": { … }` with the contents hidden even
+    // though the match was specifically on `meta`. The walk pulls in the
+    // tags array, the "a" element inside it, and the score leaf.
+    const visibleIds = new Set([...r.visibleSet].map((i) => f[i].id));
+    expect(visibleIds.has('$.meta.tags')).toBe(true);
+    expect(visibleIds.has('$.meta.tags[0]')).toBe(true);
+    expect(visibleIds.has('$.meta.score')).toBe(true);
+    expect([...r.visibleSet].sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+  });
 });
