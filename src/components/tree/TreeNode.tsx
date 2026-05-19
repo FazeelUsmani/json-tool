@@ -56,9 +56,10 @@ function OpenRow({
       })),
     );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
-  // Search overrides collapse: while a query is active, every composite
-  // renders open so search matches inside collapsed subtrees are visible.
-  const isClosed = query === '' && closedInSet;
+  // Closed state is sacred — a collapsed subtree stays collapsed during
+  // search. Matches inside it are reported in the count but won't render
+  // until the user opens the parent.
+  const isClosed = closedInSet;
   const isObj = row.node.kind === 'object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';

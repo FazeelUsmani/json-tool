@@ -91,7 +91,13 @@ export function TreeView() {
       return false;
     };
     for (let i = 0; i < flat.length; i++) {
-      const include = hasQuery ? visibleSet.has(i) : !hasClosedAncestor(i);
+      // Closed always wins: even during search, a row hidden behind a
+      // collapsed ancestor stays hidden. Search narrows; it does not
+      // force-open. Matches inside a collapsed subtree still appear in
+      // the count, but the user has to expand the parent to see them.
+      const include = hasQuery
+        ? visibleSet.has(i) && !hasClosedAncestor(i)
+        : !hasClosedAncestor(i);
       if (include) {
         idMap.set(flat[i].id, rows.length);
         fIdx.push(i);
@@ -257,7 +263,7 @@ export function TreeView() {
   function handleArrowLeft() {
     if (focusedIndex === null) return;
     const row = flat[focusedIndex];
-    if (row.kind === 'open' && !closed.has(row.id) && query === '') {
+    if (row.kind === 'open' && !closed.has(row.id)) {
       toggle(row.id);
       return;
     }
@@ -268,7 +274,7 @@ export function TreeView() {
     if (focusedIndex === null) return;
     const row = flat[focusedIndex];
     if (row.kind !== 'open') return;
-    if (closed.has(row.id) && query === '') {
+    if (closed.has(row.id)) {
       toggle(row.id);
       return;
     }
