@@ -1,6 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
-import { toast } from 'sonner';
 import { useDocumentStore } from '@/state/documentStore';
 import { useViewStore } from '@/state/viewStore';
 import {
@@ -9,11 +8,12 @@ import {
 } from '@/lib/tree/parse';
 import { type FlatRow } from '@/lib/tree/flatten';
 import { findMatches } from '@/lib/tree/search';
-import { copyText } from '@/lib/clipboard';
 import { TreeNode } from './TreeNode';
 import { TreeSearch } from './TreeSearch';
 import { Breadcrumb } from './Breadcrumb';
 import { DetailDrawer } from './DetailDrawer';
+import { useVisibleRows } from './useVisibleRows';
+import { useTreeKeyboardNav } from './useTreeKeyboardNav';
 
 // W2-Mon: tree pane reads from the flat row array in viewStore. The 150ms
 // debounce keeps typing in Monaco from re-parsing on every keystroke; the
@@ -26,9 +26,11 @@ import { DetailDrawer } from './DetailDrawer';
 // W2-Thu: keyboard nav, breadcrumb of the focused row's path, and a detail
 // drawer for primitive Enter + Info-icon clicks. Global `/` focuses the
 // search input unless typing in any input/textarea.
+//
+// W2-Fri: visibility derivation + keyboard nav extracted to dedicated hooks
+// (useVisibleRows, useTreeKeyboardNav) so TreeView is composition only.
 const PARSE_DEBOUNCE_MS = 150;
 const ROW_HEIGHT = 24;
-const PAGE_JUMP_ROWS = 20;
 
 export function TreeView() {
   const text = useDocumentStore((s) => s.text);
@@ -73,43 +75,12 @@ export function TreeView() {
     setCurrentMatch(0);
   }, [query]);
 
-  // Single-pass visibility computation: rows + parallel flat-index array +
-  // id → visible-index map. The flat-index array is what keyboard nav uses
-  // to convert a visible position back to the absolute flat index that
-  // viewStore.focusedIndex stores.
-  const { visibleRows, visibleFlatIdx, idToVisibleIdx } = useMemo(() => {
-    const rows: FlatRow[] = [];
-    const fIdx: number[] = [];
-    const idMap = new Map<string, number>();
-    const hasQuery = query !== '';
-    const hasClosedAncestor = (rowIdx: number): boolean => {
-      let p = flat[rowIdx].parentIndex;
-      while (p >= 0) {
-        if (closed.has(flat[p].id)) return true;
-        p = flat[p].parentIndex;
-      }
-      return false;
-    };
-    for (let i = 0; i < flat.length; i++) {
-      // Closed always wins: even during search, a row hidden behind a
-      // collapsed ancestor stays hidden. Search narrows; it does not
-      // force-open. Matches inside a collapsed subtree still appear in
-      // the count, but the user has to expand the parent to see them.
-      const include = hasQuery
-        ? visibleSet.has(i) && !hasClosedAncestor(i)
-        : !hasClosedAncestor(i);
-      if (include) {
-        idMap.set(flat[i].id, rows.length);
-        fIdx.push(i);
-        rows.push(flat[i]);
-      }
-    }
-    return {
-      visibleRows: rows,
-      visibleFlatIdx: fIdx,
-      idToVisibleIdx: idMap,
-    };
-  }, [flat, closed, query, visibleSet]);
+  const { visibleRows, visibleFlatIdx, idToVisibleIdx } = useVisibleRows(
+    flat,
+    closed,
+    query,
+    visibleSet,
+  );
 
   // Memoized so react-window's internal prop-change detector doesn't
   // re-render every visible row on every parent render when the row data
@@ -178,133 +149,19 @@ export function TreeView() {
     return () => document.removeEventListener('keydown', onGlobalKey);
   }, []);
 
-  const moveFocus = (delta: number) => {
-    if (visibleFlatIdx.length === 0) return;
-    const currentVisIdx =
-      focusedIndex !== null
-        ? (idToVisibleIdx.get(flat[focusedIndex]?.id ?? '') ?? -1)
-        : -1;
-    // First key with no focus jumps to the edge (start for downward keys,
-    // end for upward) — not delta rows in. PageDown shouldn't drop you on
-    // row 19 just because that's 0 + 20.
-    if (currentVisIdx === -1) {
-      setFocusedIndex(
-        visibleFlatIdx[delta > 0 ? 0 : visibleFlatIdx.length - 1],
-      );
-      return;
-    }
-    const next = Math.max(
-      0,
-      Math.min(visibleFlatIdx.length - 1, currentVisIdx + delta),
-    );
-    setFocusedIndex(visibleFlatIdx[next]);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // Inputs (search) handle their own keys.
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        moveFocus(1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        moveFocus(-1);
-        break;
-      case 'Home':
-        e.preventDefault();
-        if (visibleFlatIdx.length > 0) setFocusedIndex(visibleFlatIdx[0]);
-        break;
-      case 'End':
-        e.preventDefault();
-        if (visibleFlatIdx.length > 0)
-          setFocusedIndex(visibleFlatIdx[visibleFlatIdx.length - 1]);
-        break;
-      case 'PageDown':
-        e.preventDefault();
-        moveFocus(PAGE_JUMP_ROWS);
-        break;
-      case 'PageUp':
-        e.preventDefault();
-        moveFocus(-PAGE_JUMP_ROWS);
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        handleArrowLeft();
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        handleArrowRight();
-        break;
-      case 'Enter':
-      case ' ':
-        e.preventDefault();
-        handleEnter();
-        break;
-      case 'Escape':
-        if (query !== '') {
-          setQuery('');
-        } else {
-          containerRef.current?.blur();
-        }
-        break;
-      case 'c':
-        if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-          e.preventDefault();
-          handleCopyPath();
-        }
-        break;
-    }
-  };
-
-  function handleArrowLeft() {
-    if (focusedIndex === null) return;
-    const row = flat[focusedIndex];
-    if (row.kind === 'open' && !closed.has(row.id)) {
-      toggle(row.id);
-      return;
-    }
-    if (row.parentIndex >= 0) setFocusedIndex(row.parentIndex);
-  }
-
-  function handleArrowRight() {
-    if (focusedIndex === null) return;
-    const row = flat[focusedIndex];
-    if (row.kind !== 'open') return;
-    if (closed.has(row.id)) {
-      toggle(row.id);
-      return;
-    }
-    // Already expanded — move to first child (the row right after the open
-    // in visible order).
-    const currentVisIdx = idToVisibleIdx.get(row.id);
-    if (currentVisIdx !== undefined && currentVisIdx + 1 < visibleFlatIdx.length) {
-      setFocusedIndex(visibleFlatIdx[currentVisIdx + 1]);
-    }
-  }
-
-  function handleEnter() {
-    if (focusedIndex === null) return;
-    const row = flat[focusedIndex];
-    if (row.kind === 'open') {
-      toggle(row.id);
-    } else if (row.kind === 'leaf') {
-      openDrawer(row);
-    }
-  }
-
-  function handleCopyPath() {
-    if (focusedIndex === null) return;
-    const row = flat[focusedIndex];
-    if (row.kind === 'close') return;
-    void copyText(row.id).then((ok) => {
-      if (ok) toast.success('Path copied', { description: row.id });
-      else toast.error('Could not copy');
-    });
-  }
+  const { onKeyDown } = useTreeKeyboardNav({
+    flat,
+    visibleFlatIdx,
+    idToVisibleIdx,
+    closed,
+    query,
+    focusedIndex,
+    toggle,
+    setFocusedIndex,
+    setQuery,
+    openDrawer,
+    containerRef,
+  });
 
   if (text.trim() === '') {
     return (
