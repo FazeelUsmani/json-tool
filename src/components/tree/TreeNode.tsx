@@ -1,5 +1,7 @@
+import { memo } from 'react';
 import { Copy, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import type { TreeNode as TreeNodeData } from '@/lib/tree/parse';
 import type { FlatRow, ParentKind } from '@/lib/tree/flatten';
 import { copyText } from '@/lib/clipboard';
@@ -15,7 +17,11 @@ type CompositeNode = Extract<TreeNodeData, { kind: 'object' | 'array' }>;
 // Renders ONE row given a FlatRow + its absolute flat index. The flatIdx is
 // what viewStore.focusedIndex stores; passing it down avoids per-row store
 // scans to derive the focused state.
-export function TreeNode({
+//
+// memo'd so unchanged rows skip re-render when their FlatRow ref is stable
+// across scrolls — the parent VirtualRow + react-window recycle row slots,
+// so a stable FlatRow means nothing visible needs to change.
+export const TreeNode = memo(function TreeNode({
   row,
   flatIdx,
 }: {
@@ -25,7 +31,7 @@ export function TreeNode({
   if (row.kind === 'open') return <OpenRow row={row} flatIdx={flatIdx} />;
   if (row.kind === 'close') return <CloseRow row={row} flatIdx={flatIdx} />;
   return <LeafRow row={row} flatIdx={flatIdx} />;
-}
+});
 
 function OpenRow({
   row,
@@ -34,15 +40,25 @@ function OpenRow({
   row: Extract<FlatRow, { kind: 'open' }>;
   flatIdx: number;
 }) {
-  const closed = useViewStore((s) => s.closed);
-  const query = useViewStore((s) => s.query);
-  const toggle = useViewStore((s) => s.toggle);
-  const openDrawer = useViewStore((s) => s.openDrawer);
-  const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  // One shallow-compared selector instead of six independent subscriptions:
+  // 40 visible rows × 6 selectors = 240 selector evaluations per store
+  // update — useShallow collapses that to 40. isFocused stays separate so
+  // a focus change only re-renders the two rows whose boolean flips, not
+  // all of them.
+  const { closedInSet, query, toggle, openDrawer, setFocusedIndex } =
+    useViewStore(
+      useShallow((s) => ({
+        closedInSet: s.closed.has(row.id),
+        query: s.query,
+        toggle: s.toggle,
+        openDrawer: s.openDrawer,
+        setFocusedIndex: s.setFocusedIndex,
+      })),
+    );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   // Search overrides collapse: while a query is active, every composite
   // renders open so search matches inside collapsed subtrees are visible.
-  const isClosed = query === '' && closed.has(row.id);
+  const isClosed = query === '' && closedInSet;
   const isObj = row.node.kind === 'object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
@@ -56,7 +72,7 @@ function OpenRow({
       onShowDetail={() => openDrawer(row)}
     >
       <Caret open={!isClosed} />
-      <KeyLabel name={row.node.key} parentKind={row.parentKind} />
+      <KeyLabel name={row.node.key} parentKind={row.parentKind} query={query} />
       <span>{openCh}</span>
       {isClosed && (
         <>
@@ -101,8 +117,13 @@ function LeafRow({
   row: Extract<FlatRow, { kind: 'leaf' }>;
   flatIdx: number;
 }) {
-  const openDrawer = useViewStore((s) => s.openDrawer);
-  const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  const { query, openDrawer, setFocusedIndex } = useViewStore(
+    useShallow((s) => ({
+      query: s.query,
+      openDrawer: s.openDrawer,
+      setFocusedIndex: s.setFocusedIndex,
+    })),
+  );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   const node = row.node;
   if (node.kind === 'object' || node.kind === 'array') {
@@ -117,7 +138,7 @@ function LeafRow({
         onShowDetail={() => openDrawer(row)}
       >
         <CaretSpacer />
-        <KeyLabel name={node.key} parentKind={row.parentKind} />
+        <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
         <span>
           {openCh}
           {closeCh}
@@ -134,9 +155,9 @@ function LeafRow({
       onShowDetail={() => openDrawer(row)}
     >
       <CaretSpacer />
-      <KeyLabel name={node.key} parentKind={row.parentKind} />
+      <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
       <TypePill kind={node.kind} />
-      <Value node={node} />
+      <Value node={node} query={query} />
     </Row>
   );
 }
@@ -240,11 +261,12 @@ function CaretSpacer() {
 function KeyLabel({
   name,
   parentKind,
+  query,
 }: {
   name: string | null;
   parentKind: ParentKind;
+  query: string;
 }) {
-  const query = useViewStore((s) => s.query);
   if (name === null) return null;
   if (parentKind === 'array') {
     return (
@@ -289,8 +311,7 @@ function CountPill({
   );
 }
 
-function Value({ node }: { node: PrimitiveNode }) {
-  const query = useViewStore((s) => s.query);
+function Value({ node, query }: { node: PrimitiveNode; query: string }) {
   switch (node.kind) {
     case 'string':
       return (

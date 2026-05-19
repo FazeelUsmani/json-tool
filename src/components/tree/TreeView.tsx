@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
 import { toast } from 'sonner';
 import { useDocumentStore } from '@/state/documentStore';
@@ -129,14 +129,21 @@ export function TreeView() {
   // Auto-scroll the focused row into view. Fires on keyboard nav AND
   // click-to-focus; `align: 'smart'` makes the latter a no-op when the row
   // is already visible.
+  //
+  // rAF-coalesced: a held arrow key fires focusedIndex changes ~30/s, and
+  // each scrollToRow synchronously reads layout. The cleanup cancels any
+  // pending frame so only the latest focus position actually scrolls,
+  // capped at one scrollToRow per paint.
   useEffect(() => {
     if (focusedIndex === null) return;
     const focusedId = flat[focusedIndex]?.id;
     if (!focusedId) return;
     const visibleIdx = idToVisibleIdx.get(focusedId);
-    if (visibleIdx !== undefined) {
+    if (visibleIdx === undefined) return;
+    const handle = requestAnimationFrame(() => {
       listRef.current?.scrollToRow({ index: visibleIdx, align: 'smart' });
-    }
+    });
+    return () => cancelAnimationFrame(handle);
   }, [focusedIndex, flat, idToVisibleIdx, listRef]);
 
   // Global `/` focuses the search input — unless the user is typing in any
@@ -360,18 +367,32 @@ function NoMatches({ query }: { query: string }) {
   );
 }
 
-function VirtualRow({
+type VirtualRowProps = RowComponentProps<{
+  rows: FlatRow[];
+  visibleFlatIdx: number[];
+}>;
+
+// memo'd so a re-render of TreeView with stable rowProps doesn't re-render
+// every visible slot. react-window passes a fresh `style` object per frame
+// when scrolling, but during steady state (no scroll, no data change)
+// memo's shallow compare skips the row entirely.
+//
+// The `as unknown as` cast bridges a type gap: react-window types
+// `rowComponent` as `(props) => ReactElement | null`, but memo() returns a
+// MemoExoticComponent whose call signature widens to ReactNode. React
+// renders both identically — the cast is honest at runtime.
+const VirtualRow = memo(function VirtualRow({
   index,
   style,
   rows,
   visibleFlatIdx,
-}: RowComponentProps<{ rows: FlatRow[]; visibleFlatIdx: number[] }>) {
+}: VirtualRowProps): React.ReactElement {
   return (
     <div style={style}>
       <TreeNode row={rows[index]} flatIdx={visibleFlatIdx[index]} />
     </div>
   );
-}
+}) as unknown as (props: VirtualRowProps) => React.ReactElement;
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
