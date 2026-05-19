@@ -6,13 +6,16 @@ import {
 import { MAX_SPINE_DEPTH } from './parser-types';
 import type { TreeNode } from '@/lib/tree/parse';
 
-// Tests assume MAX_SPINE_DEPTH = 3 throughout. If the constant changes,
-// most assertions need re-baselining.
-expect(MAX_SPINE_DEPTH).toBe(3);
-
 async function parse(text: string) {
   return parseStreaming(streamFromString(text));
 }
+
+// Many tests below assume MAX_SPINE_DEPTH = 3. If the constant changes,
+// most assertions need re-baselining; this guard fails loudly first so the
+// failure pile reads as "the constant changed" not "a dozen things broke."
+test('precondition: MAX_SPINE_DEPTH === 3', () => {
+  expect(MAX_SPINE_DEPTH).toBe(3);
+});
 
 function findByPath(root: TreeNode | null, path: string): TreeNode | undefined {
   if (!root) return undefined;
@@ -130,6 +133,24 @@ describe('parseStreaming — stubs at depth >= MAX_SPINE_DEPTH', () => {
     const slice = text.slice(stub.byteStart, stub.byteEnd);
     expect(JSON.parse(slice)).toEqual([1, 2, 3]);
   });
+
+  test('byteStart/byteEnd are BYTE offsets, not char offsets (multibyte safe)', async () => {
+    // Multibyte content BEFORE the stub forces byte != char divergence.
+    // Slicing the SOURCE BYTES at the reported offsets must yield valid
+    // JSON for the stub subtree; slicing by char would land mid-character
+    // on the multibyte content and produce mojibake.
+    const text = '{"hdr":"日本語テキスト","a":{"b":{"c":[{"k":"你好"}]}}}';
+    const bytes = new TextEncoder().encode(text);
+    const r = await parseStreaming(streamFromString(text));
+    const stub = findByPath(r.root, '$.a.b.c');
+    if (stub?.kind !== 'stub-array') throw new Error('unreachable');
+    // Sanity: byteStart > char-offset of '[', proving offset is in bytes
+    // (header string adds extra bytes per CJK char).
+    expect(stub.byteStart).toBeGreaterThan(text.indexOf('['));
+    const slice = bytes.subarray(stub.byteStart, stub.byteEnd);
+    const decoded = new TextDecoder().decode(slice);
+    expect(JSON.parse(decoded)).toEqual([{ k: '你好' }]);
+  });
 });
 
 describe('parseStreaming — byte index', () => {
@@ -165,13 +186,37 @@ describe('parseStreaming — error propagation (partial root)', () => {
     expect(r.parseError?.message.length).toBeGreaterThan(0);
   });
 
-  test('valid prefix → root partial; pendingKey state visible', async () => {
-    // {"a":1 followed by EOF — tokenizer.end() fires onError because of
-    // unclosed brace. Whatever was attached before EOF stays in root.
+  test('truncated input → parseError + partial root preserved', async () => {
+    // `{"a":1` ends without the closing brace. Post-stream check sets the
+    // "unclosed object or array" error; finalize-partial drains the root
+    // frame so the user sees what parsed instead of a null root.
     const r = await parse('{"a":1');
     expect(r.parseError).toBeDefined();
-    // root may be partial: the root object was opened but never closed.
-    // We don't pin exact shape; we just confirm parseError is set.
+    if (r.root?.kind !== 'object') throw new Error('expected partial root object');
+    expect(r.root.children).toEqual([
+      { kind: 'number', key: 'a', path: '$.a', value: 1 },
+    ]);
+  });
+
+  test('error mid-stub → spine retained, no orphan stub attached', async () => {
+    // Unclosed STRING inside a depth-3 stub. tokenizer.end() fires onError
+    // because state is STRING_DEFAULT mid-token. Contract: spine
+    // ($, $.a, $.a.b) materializes as TreeNodes with empty deeper
+    // children; the active stub at $.a.b.c is discarded — no half-formed
+    // stub TreeNode appears.
+    const r = await parse('{"a":{"b":{"c":["valid", "unclosed');
+    expect(r.parseError).toBeDefined();
+    if (r.root?.kind !== 'object') throw new Error('expected partial root');
+    const a = findByPath(r.root, '$.a');
+    const b = findByPath(r.root, '$.a.b');
+    expect(a?.kind).toBe('object');
+    expect(b?.kind).toBe('object');
+    if (b?.kind !== 'object') throw new Error('unreachable');
+    // $.a.b should have no children — the stub at $.a.b.c never closed,
+    // so no node was attached for key "c".
+    expect(b.children).toEqual([]);
+    // No stub node anywhere in the tree.
+    expect(findByPath(r.root, '$.a.b.c')).toBeUndefined();
   });
 });
 

@@ -31,13 +31,12 @@ import {
   type ParseResult,
 } from './parser-types';
 
-// Spine frame on the stack. parentKind is stored explicitly so we never
-// confuse object key context with array element context — a STRING token
-// inside an array is always a value, regardless of what's in pendingKey
-// (which only matters for objects).
+// Spine frame on the stack. The STRING-as-key vs STRING-as-value
+// disambiguation reads `peek().kind` directly — the current frame's own
+// kind tells us whether we're in object position (key context) or array
+// position (value context). pendingKey only matters for object frames.
 type ObjectFrame = {
   kind: 'object';
-  parentKind: 'object' | 'array' | null;
   key: string | null;
   path: string;
   children: TreeNode[];
@@ -49,7 +48,6 @@ type ObjectFrame = {
 
 type ArrayFrame = {
   kind: 'array';
-  parentKind: 'object' | 'array' | null;
   key: string | null;
   path: string;
   children: TreeNode[];
@@ -107,10 +105,16 @@ export async function parseStreaming(
     const p = peek();
     if (p === null) return { key: null, path: '$' };
     if (p.kind === 'object') {
-      // pendingKey must be set by the preceding STRING token; if it's not,
-      // the input is malformed and Tokenizer should have emitted onError
-      // before we got here.
-      const key = p.pendingKey ?? '';
+      // Tokenizer invariant: in an object frame, every value token is
+      // preceded by a key STRING token that sets pendingKey. If pendingKey
+      // is null here, something is very wrong — fail loud rather than
+      // silently emit `$.` paths.
+      if (p.pendingKey === null) {
+        throw new Error(
+          'parser invariant violated: object frame missing pendingKey',
+        );
+      }
+      const key = p.pendingKey;
       return { key, path: `${p.path}.${key}` };
     }
     return { key: String(p.elementIndex), path: `${p.path}[${p.elementIndex}]` };
@@ -195,7 +199,6 @@ export async function parseStreaming(
           const frame: Frame = isObj
             ? {
                 kind: 'object',
-                parentKind: peek()?.kind ?? null,
                 key,
                 path,
                 children: [],
@@ -204,7 +207,6 @@ export async function parseStreaming(
               }
             : {
                 kind: 'array',
-                parentKind: peek()?.kind ?? null,
                 key,
                 path,
                 children: [],
@@ -359,11 +361,10 @@ export async function parseStreaming(
     if (!halted && !opts.signal?.aborted) {
       tokenizer.end();
     }
-    // Tokenizer.end() doesn't surface "incomplete document" — it accepts a
-    // truncated stream without erroring. Detect it ourselves: an unclosed
-    // spine frame or an active stub at stream-end means the input was cut
-    // short. Surface as a parseError so the UI can show "incomplete JSON"
-    // instead of silently returning a partial root that looks valid.
+    // Tokenizer.end() surfaces some incomplete states (mid-token) via
+    // onError but accepts unclosed-bracket inputs silently. Catch the
+    // silent case ourselves: unclosed spine frames or an active stub at
+    // stream-end means the input was cut short.
     if (!parseError && (stack.length > 0 || stub !== null)) {
       parseError = {
         message: 'Unexpected end of input: unclosed object or array',
@@ -375,6 +376,34 @@ export async function parseStreaming(
       parseError = { message: (err as Error).message };
     }
   } finally {
+    // Partial-root contract: when parsing errored or ended early, the
+    // spine frames still on the stack haven't been materialized into
+    // TreeNodes (only complete close-tokens do that). Drain the stack
+    // from innermost outward, materializing each frame with whatever
+    // children it accumulated, so the user sees what parsed instead of
+    // an empty `root: null`. The active stub (if any) is discarded — it
+    // never reached a coherent boundary, so emitting a half-stub TreeNode
+    // would mislead.
+    if (parseError) {
+      while (stack.length > 0) {
+        const frame = stack.pop()!;
+        const node: TreeNode =
+          frame.kind === 'object'
+            ? {
+                kind: 'object',
+                key: frame.key,
+                path: frame.path,
+                children: frame.children,
+              }
+            : {
+                kind: 'array',
+                key: frame.key,
+                path: frame.path,
+                children: frame.children,
+              };
+        attach(node);
+      }
+    }
     // Release the file handle so the browser can GC the underlying File.
     // cancel() is safe to call even if read() reached its natural end.
     try {
