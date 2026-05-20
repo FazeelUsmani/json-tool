@@ -128,6 +128,27 @@ function CloseRow({
 // medium-long previews (200-byte JSON usually wraps fine in a 24px row).
 const STUB_PREVIEW_MAX_BYTES = 256;
 
+// Module-level cache of decoded stub previews, keyed by sourceBlob ref so
+// new file loads get a fresh cache automatically (WeakMap GCs the entry
+// once the old Blob is no longer referenced). Without this, virtualized
+// rows that scroll out mid-decode lose their in-flight Blob.text() to
+// effect cleanup and have to re-decode on the next mount — which is why
+// bareness shifted between renders before this landed.
+const stubPreviewCache = new WeakMap<Blob, Map<string, string>>();
+
+function getCachedStubPreview(blob: Blob, id: string): string | undefined {
+  return stubPreviewCache.get(blob)?.get(id);
+}
+
+function setCachedStubPreview(blob: Blob, id: string, text: string): void {
+  let inner = stubPreviewCache.get(blob);
+  if (!inner) {
+    inner = new Map();
+    stubPreviewCache.set(blob, inner);
+  }
+  inner.set(id, text);
+}
+
 function StubRow({
   row,
   flatIdx,
@@ -154,11 +175,20 @@ function StubRow({
   // Lazy-load the preview text by slicing sourceBlob from the first
   // preview range's start to the last range's end (the commas between
   // ranges come along for free — they're between the captured element
-  // bounds in the source).
-  const [previewText, setPreviewText] = useState<string | null>(null);
+  // bounds in the source). Decoded text caches at module level so a row
+  // that unmounts mid-decode (virtualization scrolls fast) doesn't lose
+  // its result — the next mount hits the cache immediately.
+  const [previewText, setPreviewText] = useState<string | null>(() =>
+    sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
+  );
   useEffect(() => {
     if (!sourceBlob || node.preview.length === 0) {
       setPreviewText(null);
+      return;
+    }
+    const cached = getCachedStubPreview(sourceBlob, row.id);
+    if (cached !== undefined) {
+      setPreviewText(cached);
       return;
     }
     const start = node.preview[0].byteStart;
@@ -172,6 +202,9 @@ function StubRow({
       .slice(start, end)
       .text()
       .then((text) => {
+        // Cache BEFORE the cancelled check so re-mounts can hit it even
+        // if this particular component instance already unmounted.
+        setCachedStubPreview(sourceBlob, row.id, text);
         if (!cancelled) setPreviewText(text);
       })
       .catch(() => {
@@ -181,7 +214,7 @@ function StubRow({
     return () => {
       cancelled = true;
     };
-  }, [sourceBlob, node.preview]);
+  }, [sourceBlob, node.preview, row.id]);
 
   return (
     <Row
