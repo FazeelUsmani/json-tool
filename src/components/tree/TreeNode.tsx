@@ -331,7 +331,7 @@ function Row({
       onMouseDown={onFocus}
     >
       <span
-        className={`flex-1 ${onToggle ? 'cursor-pointer select-none' : ''}`}
+        className={`min-w-0 flex-1 truncate ${onToggle ? 'cursor-pointer select-none' : ''}`}
         onClick={onToggle}
       >
         {children}
