@@ -20,9 +20,12 @@ import { immer } from 'zustand/middleware/immer';
 
 export type DocumentSource =
   | { kind: 'paste' }
-  | { kind: 'file'; name: string }
-  | { kind: 'url'; url: string }
-  | { kind: 'sample'; name: string }
+  // `size` carries the original byte length so the editor pane can switch
+  // to viewer-only mode for files larger than Monaco can render without
+  // OOMing the tab. See VIEWER_ONLY_THRESHOLD in MonacoPane.
+  | { kind: 'file'; name: string; size: number }
+  | { kind: 'url'; url: string; size: number }
+  | { kind: 'sample'; name: string; size: number }
   | null;
 
 type DocumentState = {

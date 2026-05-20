@@ -49,7 +49,11 @@ export function EditorToolbar({ error, setError }: Props) {
     try {
       const result = await fetchUrl(url);
       if (result.ok) {
-        setText(result.text, { kind: 'url', url: result.finalUrl });
+        setText(result.text, {
+          kind: 'url',
+          url: result.finalUrl,
+          size: result.bytes,
+        });
         return;
       }
       setError(describeFetchError(result.error));

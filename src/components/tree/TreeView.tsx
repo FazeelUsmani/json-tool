@@ -63,7 +63,10 @@ export function TreeView() {
   // re-encoding the editor text string. For pastes / URL loads / sample
   // loads there's no File, so synthesize a Blob from the text.
   useEffect(() => {
-    if (text.trim() === '') {
+    // Empty text + no file means there's truly nothing to parse. Viewer-
+    // only file drops set text='' but pass the File through, so we DO
+    // want to parse on that branch (the worker reads via file.stream()).
+    if (text.trim() === '' && !file) {
       setRoot(null);
       setParseError(null);
       return;
