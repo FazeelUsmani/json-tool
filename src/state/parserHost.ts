@@ -54,7 +54,14 @@ export async function parseFile(
   terminateWorker();
   const remote = ensureWorker();
   const cb = onProgress ?? (() => {});
-  return remote.parseFile(file, Comlink.proxy(cb));
+  const t0 = performance.now();
+  const result = await remote.parseFile(file, Comlink.proxy(cb));
+  const ms = Math.round(performance.now() - t0);
+  // eslint-disable-next-line no-console
+  console.log(
+    `[parser] parseFile ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${(file.size / 1024 / 1024 / (ms / 1000)).toFixed(1)} MB/s)`,
+  );
+  return result;
 }
 
 export async function expandStub(

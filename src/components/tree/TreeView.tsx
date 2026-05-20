@@ -34,6 +34,7 @@ const ROW_HEIGHT = 24;
 export function TreeView() {
   const text = useDocumentStore((s) => s.text);
   const file = useDocumentStore((s) => s.file);
+  const source = useDocumentStore((s) => s.source);
   const setRoot = useViewStore((s) => s.setRoot);
   const flat = useViewStore((s) => s.flat);
   const closed = useViewStore((s) => s.closed);
@@ -69,14 +70,18 @@ export function TreeView() {
     }
 
     let cancelled = false;
+    // Debounce exists to coalesce keystrokes mid-typing; file / URL /
+    // sample loads have a known terminal value, so parse immediately.
+    // Saves a visible 150ms of "did the drop register?" on huge files.
+    const debounceMs = source?.kind === 'paste' ? PARSE_DEBOUNCE_MS : 0;
     const handle = setTimeout(() => {
-      const source =
+      const parseSource =
         file ?? new Blob([text], { type: 'application/json' });
       // Retain the blob in viewStore so expandStub can re-slice byte
       // ranges later. Stored BEFORE the parse Promise resolves so a
       // stub click that races the parse can still see a source.
-      setSourceBlob(source);
-      parseFileStreaming(source)
+      setSourceBlob(parseSource);
+      parseFileStreaming(parseSource)
         .then((result) => {
           if (cancelled) return;
           setRoot(result.root);
@@ -95,12 +100,12 @@ export function TreeView() {
           // Promise. That's the cancel path — don't surface it as a
           // user-visible error.
         });
-    }, PARSE_DEBOUNCE_MS);
+    }, debounceMs);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [text, file, setRoot, setSourceBlob]);
+  }, [text, file, source, setRoot, setSourceBlob]);
 
   const { matchIndices, visibleSet } = useMemo(
     () => findMatches(flat, query),
