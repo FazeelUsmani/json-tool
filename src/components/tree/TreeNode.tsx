@@ -80,18 +80,87 @@ function OpenRow({
     >
       <Caret open={!isClosed} />
       <KeyLabel name={row.node.key} parentKind={row.parentKind} query={query} />
-      <span>{openCh}</span>
-      {isClosed && (
-        <>
-          <span className="text-muted-foreground">
-            {' '}
-            … {closeCh}
-          </span>
-          <CountPill count={row.node.children.length} kind={row.node.kind} />
-        </>
+      {isClosed ? (
+        <ClosedCompositeBody
+          node={row.node}
+          openCh={openCh}
+          closeCh={closeCh}
+        />
+      ) : (
+        <span>{openCh}</span>
       )}
     </Row>
   );
+}
+
+// Inline preview for a closed materialized composite — same visual shape
+// as StubRow's preview, but generated from the already-materialized
+// children instead of slicing sourceBlob. This is what makes an
+// expand→collapse cycle return to the preview rendering the user saw
+// before they expanded (closed `{ "id":0, "name":"click", … } [5]` instead
+// of bare `{ … } [5]`).
+function ClosedCompositeBody({
+  node,
+  openCh,
+  closeCh,
+}: {
+  node: CompositeNode;
+  openCh: '{' | '[';
+  closeCh: '}' | ']';
+}) {
+  if (node.children.length === 0) {
+    return (
+      <>
+        <span>{openCh}{closeCh}</span>
+      </>
+    );
+  }
+  const previewText = previewFromChildren(node);
+  return (
+    <>
+      <span>{openCh} </span>
+      <span className="text-muted-foreground truncate">{previewText}</span>
+      {node.children.length > 3 && (
+        <span className="text-muted-foreground">, …</span>
+      )}
+      <span> {closeCh}</span>
+      <CountPill count={node.children.length} kind={node.kind} />
+    </>
+  );
+}
+
+// First N children rendered as compact JSON fragments. Nested composites
+// collapse to `{…}` / `[…]` rather than recursing so the inline preview
+// stays a single line. Cap matches StubRow's three-element capture.
+function previewFromChildren(node: CompositeNode): string {
+  const isObj = node.kind === 'object';
+  const limit = Math.min(node.children.length, 3);
+  const parts: string[] = [];
+  for (let i = 0; i < limit; i++) {
+    const c = node.children[i];
+    parts.push(
+      isObj ? `"${c.key}":${previewChildValue(c)}` : previewChildValue(c),
+    );
+  }
+  return parts.join(', ');
+}
+
+function previewChildValue(node: TreeNodeData): string {
+  switch (node.kind) {
+    case 'string':
+      return JSON.stringify(node.value);
+    case 'number':
+    case 'boolean':
+      return String(node.value);
+    case 'null':
+      return 'null';
+    case 'object':
+    case 'stub-object':
+      return '{…}';
+    case 'array':
+    case 'stub-array':
+      return '[…]';
+  }
 }
 
 function CloseRow({
