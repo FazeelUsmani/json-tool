@@ -20,7 +20,17 @@ export function spliceSubtree(
   atPath: string,
   replacement: TreeNode,
 ): TreeNode {
-  if (root.path === atPath) return replacement;
+  // Preserve the original's key: the worker parses the subtree in
+  // isolation via basePath and returns a root with key:null, which would
+  // drop the array index or object-key label after the splice (e.g.
+  // [41746] would collapse to a keyless `{ … } {5}` row after expand→
+  // collapse). Only allocate when keys actually differ — keeps structural
+  // sharing intact for callers that pre-aligned the key.
+  if (root.path === atPath) {
+    return replacement.key === root.key
+      ? replacement
+      : { ...replacement, key: root.key };
+  }
 
   // Early-out when atPath cannot lie under root.path: a node's children's
   // paths all extend root.path with either `.` (object key) or `[` (array

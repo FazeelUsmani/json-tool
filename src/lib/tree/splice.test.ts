@@ -27,6 +27,7 @@ function stub(key: string, path: string): TreeNode {
     byteStart: 0,
     byteEnd: 10,
     childCount: 0,
+    preview: [],
   };
 }
 
@@ -89,6 +90,24 @@ describe('spliceSubtree', () => {
     // Untouched siblings keep their references.
     expect(result.children[1]).toBe(untouchedB);
     expect(result.children[2]).toBe(untouchedC);
+  });
+
+  test('preserves original key when replacement has key:null', () => {
+    // Regression for the W3-Wed bug where expanding then collapsing an
+    // array-element stub dropped its index label: worker's expandStub
+    // returns a root with key:null (parsed in isolation via basePath),
+    // and splice was returning it directly. Result: `[41746]: { … }`
+    // collapsed to a keyless `{ … }` after expand→collapse.
+    const stubAt0 = stub('0', '$.events[0]');
+    const workerReply = obj(null, '$.events[0]', [
+      leaf('id', '$.events[0].id', 1),
+    ]);
+    const root = obj(null, '$', [arr('events', '$.events', [stubAt0])]);
+    const result = spliceSubtree(root, '$.events[0]', workerReply);
+    if (result.kind !== 'object') throw new Error('unreachable');
+    const events = result.children[0];
+    if (events.kind !== 'array') throw new Error('unreachable');
+    expect(events.children[0].key).toBe('0');
   });
 
   test('missing path returns root unchanged (no error)', () => {
