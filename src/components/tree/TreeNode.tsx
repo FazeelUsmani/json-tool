@@ -117,7 +117,7 @@ function CloseRow({
   );
 }
 
-// Renders a depth-3+ composite that hasn't been materialized yet. Visually
+// Renders a depth >= MAX_SPINE_DEPTH composite that hasn't been materialized yet. Visually
 // matches OpenRow's collapsed state — caret + key + bracketed-elide + count
 // pill — but has no toggle handler. Step 7 wires click-to-expand via
 // parserHost.expandStub; until then the row is focusable / copyable /

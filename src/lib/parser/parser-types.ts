@@ -34,7 +34,15 @@ export type ParseResult = {
   parseError?: ParseError;
 };
 
-// Top 3 levels (depths 0, 1, 2) are fully materialized in the spine.
+// Top 2 levels (depths 0 and 1) are fully materialized in the spine.
 // Composites at depth >= MAX_SPINE_DEPTH become stubs with byte ranges; the
 // user expands them on demand. PLAN.MD W3 architecture.
-export const MAX_SPINE_DEPTH = 3;
+//
+// Lowered from 3 to 2 in W3-Wed after step 8.2 smoke showed depth-3 left
+// us with ~6.25M FlatRows + 900K event TreeNodes at 200MB → ~2GB RSS,
+// over the 1.5GB budget. At depth 2, telemetry events become stubs
+// themselves (one per array element), spine collapses, RSS lands well
+// inside budget. Trade-off is that users see collapsed-by-default rows
+// without pre-materialized content — addressed by the stub-preview field
+// (W3-Wed part B).
+export const MAX_SPINE_DEPTH = 2;

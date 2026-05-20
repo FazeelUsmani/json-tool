@@ -10,11 +10,11 @@ async function parse(text: string) {
   return parseStreaming(streamFromString(text));
 }
 
-// Many tests below assume MAX_SPINE_DEPTH = 3. If the constant changes,
+// Many tests below assume MAX_SPINE_DEPTH = 2. If the constant changes,
 // most assertions need re-baselining; this guard fails loudly first so the
 // failure pile reads as "the constant changed" not "a dozen things broke."
-test('precondition: MAX_SPINE_DEPTH === 3', () => {
-  expect(MAX_SPINE_DEPTH).toBe(3);
+test('precondition: MAX_SPINE_DEPTH === 2', () => {
+  expect(MAX_SPINE_DEPTH).toBe(2);
 });
 
 function findByPath(root: TreeNode | null, path: string): TreeNode | undefined {
@@ -60,75 +60,76 @@ describe('parseStreaming — spine', () => {
     ]);
   });
 
-  test('depth-2 composite is materialized (still spine)', async () => {
-    // depth 0: root, depth 1: $.outer, depth 2: $.outer.mid
-    // mid is at depth 2 (< MAX_SPINE_DEPTH=3) → fully materialized
-    const r = await parse('{"outer":{"mid":{"v":1}}}');
-    const mid = findByPath(r.root, '$.outer.mid');
-    expect(mid?.kind).toBe('object');
-    if (mid?.kind !== 'object') throw new Error('unreachable');
-    expect(mid.children[0]).toEqual({
+  test('depth-1 composite is materialized (still spine)', async () => {
+    // depth 0: root, depth 1: $.outer
+    // outer is at depth 1 (< MAX_SPINE_DEPTH=2) → fully materialized as
+    // an object with a primitive child.
+    const r = await parse('{"outer":{"v":1}}');
+    const outer = findByPath(r.root, '$.outer');
+    expect(outer?.kind).toBe('object');
+    if (outer?.kind !== 'object') throw new Error('unreachable');
+    expect(outer.children[0]).toEqual({
       kind: 'number',
       key: 'v',
-      path: '$.outer.mid.v',
+      path: '$.outer.v',
       value: 1,
     });
   });
 });
 
 describe('parseStreaming — stubs at depth >= MAX_SPINE_DEPTH', () => {
-  test('depth-3 object becomes a stub-object', async () => {
-    // root(0) → outer(1) → mid(2) → deep(3) — deep is the stub
-    const r = await parse('{"outer":{"mid":{"deep":{"x":1,"y":2}}}}');
-    const deep = findByPath(r.root, '$.outer.mid.deep');
-    expect(deep?.kind).toBe('stub-object');
-    if (deep?.kind !== 'stub-object') throw new Error('unreachable');
-    expect(deep.childCount).toBe(2);
-    expect(deep.byteEnd).toBeGreaterThan(deep.byteStart);
+  test('depth-2 object becomes a stub-object', async () => {
+    // root(0) → outer(1) → mid(2) — mid is the stub
+    const r = await parse('{"outer":{"mid":{"x":1,"y":2}}}');
+    const mid = findByPath(r.root, '$.outer.mid');
+    expect(mid?.kind).toBe('stub-object');
+    if (mid?.kind !== 'stub-object') throw new Error('unreachable');
+    expect(mid.childCount).toBe(2);
+    expect(mid.byteEnd).toBeGreaterThan(mid.byteStart);
   });
 
-  test('depth-3 array becomes a stub-array; byteEnd > byteStart', async () => {
-    const r = await parse('{"a":{"b":{"c":[1,2,3,4,5]}}}');
-    const stub = findByPath(r.root, '$.a.b.c');
+  test('depth-2 array becomes a stub-array; byteEnd > byteStart', async () => {
+    const r = await parse('{"a":{"b":[1,2,3,4,5]}}');
+    const stub = findByPath(r.root, '$.a.b');
     expect(stub?.kind).toBe('stub-array');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     expect(stub.childCount).toBe(5);
   });
 
   test('empty stub-object reports childCount=0', async () => {
-    const r = await parse('{"a":{"b":{"c":{}}}}');
-    const stub = findByPath(r.root, '$.a.b.c');
+    const r = await parse('{"a":{"b":{}}}');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-object') throw new Error('unreachable');
     expect(stub.childCount).toBe(0);
   });
 
   test('empty stub-array reports childCount=0', async () => {
-    const r = await parse('{"a":{"b":{"c":[]}}}');
-    const stub = findByPath(r.root, '$.a.b.c');
+    const r = await parse('{"a":{"b":[]}}');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     expect(stub.childCount).toBe(0);
   });
 
   test('single-element stub reports childCount=1 (commas+1 with hasElement)', async () => {
-    const r = await parse('{"a":{"b":{"c":[42]}}}');
-    const stub = findByPath(r.root, '$.a.b.c');
+    const r = await parse('{"a":{"b":[42]}}');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     expect(stub.childCount).toBe(1);
   });
 
   test('stub with nested composite children still counts top-level only', async () => {
-    // c has 3 top-level children: [], {}, 1. The nested empty composites
+    // b has 3 top-level children: [], {}, 1. The nested empty composites
     // shouldn't be double-counted via inner LEFT/RIGHT tokens.
-    const r = await parse('{"a":{"b":{"c":[[],{},1]}}}');
-    const stub = findByPath(r.root, '$.a.b.c');
+    const r = await parse('{"a":{"b":[[],{},1]}}');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     expect(stub.childCount).toBe(3);
   });
 
   test('stub byte range slices to valid JSON', async () => {
-    const text = '{"a":{"b":{"c":[1,2,3]}}}';
+    const text = '{"a":{"b":[1,2,3]}}';
     const r = await parse(text);
-    const stub = findByPath(r.root, '$.a.b.c');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     const slice = text.slice(stub.byteStart, stub.byteEnd);
     expect(JSON.parse(slice)).toEqual([1, 2, 3]);
@@ -139,10 +140,10 @@ describe('parseStreaming — stubs at depth >= MAX_SPINE_DEPTH', () => {
     // Slicing the SOURCE BYTES at the reported offsets must yield valid
     // JSON for the stub subtree; slicing by char would land mid-character
     // on the multibyte content and produce mojibake.
-    const text = '{"hdr":"日本語テキスト","a":{"b":{"c":[{"k":"你好"}]}}}';
+    const text = '{"hdr":"日本語テキスト","a":{"b":[{"k":"你好"}]}}';
     const bytes = new TextEncoder().encode(text);
     const r = await parseStreaming(streamFromString(text));
-    const stub = findByPath(r.root, '$.a.b.c');
+    const stub = findByPath(r.root, '$.a.b');
     if (stub?.kind !== 'stub-array') throw new Error('unreachable');
     // Sanity: byteStart > char-offset of '[', proving offset is in bytes
     // (header string adds extra bytes per CJK char).
@@ -155,19 +156,21 @@ describe('parseStreaming — stubs at depth >= MAX_SPINE_DEPTH', () => {
 
 describe('parseStreaming — byte index', () => {
   test('every spine composite appears in byteIndex', async () => {
-    const r = await parse('{"outer":{"mid":{"deep":[]}}}');
+    // depth 0: $, depth 1: $.outer, depth 2: $.outer.mid (stub).
+    // $.outer.mid is the stub itself — included in byteIndex; anything
+    // INSIDE it (e.g., $.outer.mid.deep) is not.
+    const r = await parse('{"outer":{"mid":[]}}');
     const paths = new Set(r.byteIndex.map(([p]) => p));
     expect(paths.has('$')).toBe(true);
     expect(paths.has('$.outer')).toBe(true);
-    expect(paths.has('$.outer.mid')).toBe(true);
-    expect(paths.has('$.outer.mid.deep')).toBe(true); // stub
+    expect(paths.has('$.outer.mid')).toBe(true); // stub
   });
 
   test('stub TreeNodes keep inline byteStart/byteEnd after sampling drops their byteIndex entry', async () => {
-    // events array at depth 1 → its children (events) are at depth 2,
-    // materialized as spine. Each event's `.user` is at depth 3 → stub.
-    // 200 elements + threshold=100/n=100 means every event's byteIndex
-    // entries get sampled (K=0 and K=100 kept; rest dropped).
+    // events array at depth 1 (materialized). Each events[i] is at depth
+    // 2 → stub. 200 elements + threshold=100/n=100: events[37]'s
+    // byteIndex entry is sampled out (37 % 100 !== 0); the TreeNode's
+    // inline byte range must survive — expansion reads it directly.
     const events = Array.from({ length: 200 }, (_, i) => ({
       id: i,
       user: { name: `u${i}` },
@@ -192,39 +195,35 @@ describe('parseStreaming — byte index', () => {
       return undefined;
     }
 
-    // events[37] is sampled OUT of byteIndex but its TreeNode is still
-    // fully materialized in the spine.
     const event37 = find(r.root!, '$.events[37]');
-    if (event37?.kind !== 'object') throw new Error('unreachable');
-    const userStub = event37.children.find((c) => c.key === 'user');
-    if (userStub?.kind !== 'stub-object') throw new Error('unreachable');
+    if (event37?.kind !== 'stub-object') throw new Error('unreachable');
 
     // Crucial invariant: even though this stub's path was dropped from
     // byteIndex by sampling, the TreeNode itself still carries valid
     // byte ranges. Step 7's expansion reads these inline — sampling must
     // never touch them.
-    expect(userStub.byteStart).toBeGreaterThan(0);
-    expect(userStub.byteEnd).toBeGreaterThan(userStub.byteStart);
+    expect(event37.byteStart).toBeGreaterThan(0);
+    expect(event37.byteEnd).toBeGreaterThan(event37.byteStart);
     const bytes = new TextEncoder().encode(text);
-    const slice = bytes.subarray(userStub.byteStart, userStub.byteEnd);
+    const slice = bytes.subarray(event37.byteStart, event37.byteEnd);
     expect(JSON.parse(new TextDecoder().decode(slice))).toEqual({
-      name: 'u37',
+      id: 37,
+      user: { name: 'u37' },
     });
 
     // Sampling-side sanity: K=37 dropped, K=100 kept.
     const idxPaths = new Set(r.byteIndex.map(([p]) => p));
-    expect(idxPaths.has('$.events[37].user')).toBe(false);
-    expect(idxPaths.has('$.events[100].user')).toBe(true);
+    expect(idxPaths.has('$.events[37]')).toBe(false);
+    expect(idxPaths.has('$.events[100]')).toBe(true);
   });
 
   test('byteIndex ranges round-trip via JSON.parse', async () => {
+    // depth 0: $, depth 1: $.x, depth 2: $.x.y (stub wrapping
+    // {"z":{"k":1}}). Every byteIndex entry should slice into valid JSON.
     const text = '{"x":{"y":{"z":{"k":1}}}}';
     const r = await parse(text);
     for (const [path, { byteStart, byteEnd }] of r.byteIndex) {
       const slice = text.slice(byteStart, byteEnd);
-      // The slice should be valid JSON for the value at `path`. We don't
-      // assert exact equality here (would require materialized comparison),
-      // just that it parses.
       expect(() => JSON.parse(slice), `path: ${path}`).not.toThrow();
     }
   });
@@ -257,10 +256,10 @@ describe('parseStreaming — expansion (basePath + byteOffsetBase)', () => {
   });
 
   test('stubs inside expanded subtree carry rebased paths + shifted offsets', async () => {
-    // The subtree itself contains depth-3 stubs (depth 3 within the slice).
+    // The subtree itself contains depth-2 stubs (depth 2 within the slice).
     // Their paths should be under basePath; offsets in original-file
     // coordinates.
-    const subtreeText = '{"a":{"b":{"c":{"deep":1}}}}';
+    const subtreeText = '{"a":{"b":{"deep":1}}}';
     const r = await parseStreaming(streamFromString(subtreeText), {
       basePath: '$.users[0]',
       byteOffsetBase: 1000,
@@ -276,10 +275,10 @@ describe('parseStreaming — expansion (basePath + byteOffsetBase)', () => {
       }
       return undefined;
     }
-    const stub = find(r.root, '$.users[0].a.b.c');
+    const stub = find(r.root, '$.users[0].a.b');
     expect(stub?.kind).toBe('stub-object');
     if (stub?.kind !== 'stub-object') throw new Error('unreachable');
-    // c is at slice-offset where `{"deep":1}` starts (after `{"a":{"b":{"c":`).
+    // b is at slice-offset where `{"deep":1}` starts (after `{"a":{"b":`).
     const sliceOffset = subtreeText.indexOf('{"deep":1}');
     expect(stub.byteStart).toBe(sliceOffset + 1000);
     expect(stub.byteEnd).toBe(sliceOffset + '{"deep":1}'.length + 1000);
@@ -309,24 +308,21 @@ describe('parseStreaming — error propagation (partial root)', () => {
   });
 
   test('error mid-stub → spine retained, no orphan stub attached', async () => {
-    // Unclosed STRING inside a depth-3 stub. tokenizer.end() fires onError
-    // because state is STRING_DEFAULT mid-token. Contract: spine
-    // ($, $.a, $.a.b) materializes as TreeNodes with empty deeper
-    // children; the active stub at $.a.b.c is discarded — no half-formed
-    // stub TreeNode appears.
-    const r = await parse('{"a":{"b":{"c":["valid", "unclosed');
+    // Unclosed STRING inside a depth-2 stub. tokenizer.end() fires onError
+    // because state is STRING_DEFAULT mid-token. Contract: spine ($, $.a)
+    // materializes as TreeNodes; the active stub at $.a.b is discarded —
+    // no half-formed stub TreeNode appears.
+    const r = await parse('{"a":{"b":["valid", "unclosed');
     expect(r.parseError).toBeDefined();
     if (r.root?.kind !== 'object') throw new Error('expected partial root');
     const a = findByPath(r.root, '$.a');
-    const b = findByPath(r.root, '$.a.b');
     expect(a?.kind).toBe('object');
-    expect(b?.kind).toBe('object');
-    if (b?.kind !== 'object') throw new Error('unreachable');
-    // $.a.b should have no children — the stub at $.a.b.c never closed,
-    // so no node was attached for key "c".
-    expect(b.children).toEqual([]);
+    if (a?.kind !== 'object') throw new Error('unreachable');
+    // $.a should have no children — the stub at $.a.b never closed, so
+    // no node was attached for key "b".
+    expect(a.children).toEqual([]);
     // No stub node anywhere in the tree.
-    expect(findByPath(r.root, '$.a.b.c')).toBeUndefined();
+    expect(findByPath(r.root, '$.a.b')).toBeUndefined();
   });
 });
 

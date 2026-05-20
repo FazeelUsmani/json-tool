@@ -208,6 +208,14 @@ export async function parseStreaming(
         const isObj = info.token === TokenType.LEFT_BRACE;
         const { key, path } = nextChildIdentity();
         if (depth >= MAX_SPINE_DEPTH) {
+          // Progressive disclosure: do NOT walk into this subtree. The
+          // initial parse only materializes the top MAX_SPINE_DEPTH levels;
+          // anything deeper waits for an explicit expandStub call. Without
+          // this gate, 200MB inputs balloon to multi-GB RSS from spine
+          // FlatRows / TreeNodes. If you ever refactor to "fully
+          // materialize on expand," remember the user is on a phone with
+          // 4GB RAM total.
+          //
           // Switch into stub mode. depthAccum starts at 1 (we just entered
           // the stub's outermost container).
           stub = {
