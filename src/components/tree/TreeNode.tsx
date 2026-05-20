@@ -181,6 +181,19 @@ function StubRow({
   const [previewText, setPreviewText] = useState<string | null>(() =>
     sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
   );
+  // Derived-state-from-props pattern: react-window recycles the same
+  // <StubRow> instance for different rows during scroll. useState retains
+  // the previous occupant's previewText across that prop change, so the
+  // recycled row would render the wrong preview for one frame before the
+  // useEffect below re-fired. Reset synchronously on row.id change so
+  // the stale text never reaches the DOM.
+  const [prevRowId, setPrevRowId] = useState(row.id);
+  if (prevRowId !== row.id) {
+    setPrevRowId(row.id);
+    setPreviewText(
+      sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
+    );
+  }
   useEffect(() => {
     if (!sourceBlob || node.preview.length === 0) {
       setPreviewText(null);
