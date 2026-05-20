@@ -128,13 +128,19 @@ function CloseRow({
 // medium-long previews (200-byte JSON usually wraps fine in a 24px row).
 const STUB_PREVIEW_MAX_BYTES = 256;
 
-// Module-level cache of decoded stub previews, keyed by sourceBlob ref so
-// new file loads get a fresh cache automatically (WeakMap GCs the entry
-// once the old Blob is no longer referenced). Without this, virtualized
-// rows that scroll out mid-decode lose their in-flight Blob.text() to
-// effect cleanup and have to re-decode on the next mount — which is why
-// bareness shifted between renders before this landed.
+// Two-tier module-level cache, both keyed by sourceBlob ref so new file
+// loads GC their caches automatically (WeakMap).
+//
+// `stubPreviewCache` — resolved text, used for synchronous reads in the
+// useState init and the row-recycle reset path.
+// `stubPreviewLoaders` — in-flight Promises, so virtualization-recycled
+// rows that re-mount before their first slice resolves can JOIN the
+// existing decode instead of kicking off a duplicate one. This is what
+// closed the first-mount-window bareness: previously the slice's
+// resolution was discarded by cleanup before setPreviewText could fire,
+// and the next mount had no signal that a slice was already running.
 const stubPreviewCache = new WeakMap<Blob, Map<string, string>>();
+const stubPreviewLoaders = new WeakMap<Blob, Map<string, Promise<string>>>();
 
 function getCachedStubPreview(blob: Blob, id: string): string | undefined {
   return stubPreviewCache.get(blob)?.get(id);
@@ -147,6 +153,30 @@ function setCachedStubPreview(blob: Blob, id: string, text: string): void {
     stubPreviewCache.set(blob, inner);
   }
   inner.set(id, text);
+}
+
+function getStubPreviewLoader(
+  blob: Blob,
+  id: string,
+): Promise<string> | undefined {
+  return stubPreviewLoaders.get(blob)?.get(id);
+}
+
+function setStubPreviewLoader(
+  blob: Blob,
+  id: string,
+  loader: Promise<string>,
+): void {
+  let inner = stubPreviewLoaders.get(blob);
+  if (!inner) {
+    inner = new Map();
+    stubPreviewLoaders.set(blob, inner);
+  }
+  inner.set(id, loader);
+}
+
+function clearStubPreviewLoader(blob: Blob, id: string): void {
+  stubPreviewLoaders.get(blob)?.delete(id);
 }
 
 function StubRow({
@@ -210,19 +240,25 @@ function StubRow({
       setPreviewText(null);
       return;
     }
+    // Join an in-flight slice for this same row, or kick off a new one
+    // and register it so concurrent / re-mounted instances can attach
+    // to the same decode instead of spawning a duplicate.
+    let loader = getStubPreviewLoader(sourceBlob, row.id);
+    if (loader === undefined) {
+      loader = sourceBlob.slice(start, end).text();
+      setStubPreviewLoader(sourceBlob, row.id, loader);
+    }
     let cancelled = false;
-    sourceBlob
-      .slice(start, end)
-      .text()
+    loader
       .then((text) => {
-        // Cache BEFORE the cancelled check so re-mounts can hit it even
-        // if this particular component instance already unmounted.
         setCachedStubPreview(sourceBlob, row.id, text);
+        clearStubPreviewLoader(sourceBlob, row.id);
         if (!cancelled) setPreviewText(text);
       })
       .catch(() => {
-        // Blob read can fail if the source was swapped mid-read; not
-        // surfaced as user-visible since the fallback (`{ … }`) renders.
+        // Drop the failed loader so the next mount can retry instead of
+        // re-awaiting a permanently-rejected Promise.
+        clearStubPreviewLoader(sourceBlob, row.id);
       });
     return () => {
       cancelled = true;
