@@ -17,6 +17,12 @@ export type TreeNode =
   // is not materialized until the user expands it. byteStart/byteEnd point
   // into the original file so expansion can re-tokenize just that range.
   // parseToTree never emits these — they originate from parse-streaming.ts.
+  //
+  // W3-Wed Part B: `preview` carries byte ranges of the first up-to-3
+  // immediate children (KV pairs for objects, elements for arrays) so
+  // StubRow can render an inline preview by slicing sourceBlob — turns
+  // `▸ 0: { … } [5]` into `▸ 0: { "id":0, "name":"click", … } [5]`
+  // without materializing the whole subtree. Empty stubs have preview=[].
   | {
       kind: 'stub-object';
       key: string | null;
@@ -24,6 +30,7 @@ export type TreeNode =
       byteStart: number;
       byteEnd: number;
       childCount: number;
+      preview: { byteStart: number; byteEnd: number }[];
     }
   | {
       kind: 'stub-array';
@@ -32,6 +39,7 @@ export type TreeNode =
       byteStart: number;
       byteEnd: number;
       childCount: number;
+      preview: { byteStart: number; byteEnd: number }[];
     };
 
 export type ParseTreeResult =

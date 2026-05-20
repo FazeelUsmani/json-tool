@@ -86,6 +86,7 @@ describe('flattenTree', () => {
           byteStart: 10,
           byteEnd: 200,
           childCount: 42,
+          preview: [],
         },
       ],
     };

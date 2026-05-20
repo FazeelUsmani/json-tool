@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Copy, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -122,6 +122,12 @@ function CloseRow({
 // pill — but has no toggle handler. Step 7 wires click-to-expand via
 // parserHost.expandStub; until then the row is focusable / copyable /
 // drawer-openable but inert otherwise.
+// Cap on the inline preview slice length (in bytes). A single string-valued
+// element can be megabytes; reading + decoding that per visible row blocks
+// scrolling. Anything past this falls back to `{ … }`. CSS overflow handles
+// medium-long previews (200-byte JSON usually wraps fine in a 24px row).
+const STUB_PREVIEW_MAX_BYTES = 256;
+
 function StubRow({
   row,
   flatIdx,
@@ -138,11 +144,45 @@ function StubRow({
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const sourceBlob = useViewStore((s) => s.sourceBlob);
   const expand = useStubExpansion();
   const node = row.node;
   const isObj = node.kind === 'stub-object';
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
+
+  // Lazy-load the preview text by slicing sourceBlob from the first
+  // preview range's start to the last range's end (the commas between
+  // ranges come along for free — they're between the captured element
+  // bounds in the source).
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sourceBlob || node.preview.length === 0) {
+      setPreviewText(null);
+      return;
+    }
+    const start = node.preview[0].byteStart;
+    const end = node.preview[node.preview.length - 1].byteEnd;
+    if (end - start > STUB_PREVIEW_MAX_BYTES) {
+      setPreviewText(null);
+      return;
+    }
+    let cancelled = false;
+    sourceBlob
+      .slice(start, end)
+      .text()
+      .then((text) => {
+        if (!cancelled) setPreviewText(text);
+      })
+      .catch(() => {
+        // Blob read can fail if the source was swapped mid-read; not
+        // surfaced as user-visible since the fallback (`{ … }`) renders.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceBlob, node.preview]);
+
   return (
     <Row
       pad={pad(row.depth)}
@@ -154,14 +194,55 @@ function StubRow({
     >
       <Caret open={false} />
       <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
-      <span>{openCh}</span>
-      <span className="text-muted-foreground"> … {closeCh}</span>
+      <StubBody
+        openCh={openCh}
+        closeCh={closeCh}
+        previewText={previewText}
+        childCount={node.childCount}
+        previewCount={node.preview.length}
+      />
       {isExpanding ? (
         <Loader2 className="text-muted-foreground ml-1 size-3 animate-spin" />
       ) : (
         <StubCountPill count={node.childCount} kind={node.kind} />
       )}
     </Row>
+  );
+}
+
+function StubBody({
+  openCh,
+  closeCh,
+  previewText,
+  childCount,
+  previewCount,
+}: {
+  openCh: '{' | '[';
+  closeCh: '}' | ']';
+  previewText: string | null;
+  childCount: number;
+  previewCount: number;
+}) {
+  if (childCount === 0) {
+    return <span>{`${openCh}${closeCh}`}</span>;
+  }
+  if (previewText === null) {
+    return (
+      <>
+        <span>{openCh}</span>
+        <span className="text-muted-foreground">{` … ${closeCh}`}</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span>{openCh} </span>
+      <span className="text-muted-foreground truncate">{previewText}</span>
+      {childCount > previewCount && (
+        <span className="text-muted-foreground">, …</span>
+      )}
+      <span> {closeCh}</span>
+    </>
   );
 }
 

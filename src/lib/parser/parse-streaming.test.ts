@@ -154,6 +154,106 @@ describe('parseStreaming — stubs at depth >= MAX_SPINE_DEPTH', () => {
   });
 });
 
+describe('parseStreaming — stub preview ranges', () => {
+  test('empty stub has empty preview', async () => {
+    const r = await parse('{"a":{"b":{}}}');
+    const stub = findByPath(r.root, '$.a.b');
+    if (stub?.kind !== 'stub-object') throw new Error('unreachable');
+    expect(stub.preview).toEqual([]);
+  });
+
+  test('object stub: first three KV pairs slice to valid JSON', async () => {
+    // depth 2: $.a.b is a stub-object. Preview should capture first 3 KV
+    // pairs as byte ranges; slicing each gives `"key":value` fragments.
+    const text = '{"a":{"b":{"id":0,"name":"click","kind":"submit","plan":"pro","ms":42}}}';
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.a.b');
+    if (stub?.kind !== 'stub-object') throw new Error('unreachable');
+    expect(stub.preview).toHaveLength(3);
+    const slices = stub.preview.map(({ byteStart, byteEnd }) =>
+      text.slice(byteStart, byteEnd),
+    );
+    expect(slices).toEqual([
+      '"id":0',
+      '"name":"click"',
+      '"kind":"submit"',
+    ]);
+  });
+
+  test('array stub: first three elements slice to valid JSON', async () => {
+    const text = '{"a":{"b":[10,20,30,40,50]}}';
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.a.b');
+    if (stub?.kind !== 'stub-array') throw new Error('unreachable');
+    expect(stub.preview).toHaveLength(3);
+    const slices = stub.preview.map(({ byteStart, byteEnd }) =>
+      text.slice(byteStart, byteEnd),
+    );
+    expect(slices).toEqual(['10', '20', '30']);
+  });
+
+  test('single-element stub has preview of length 1', async () => {
+    const text = '{"a":{"b":[42]}}';
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.a.b');
+    if (stub?.kind !== 'stub-array') throw new Error('unreachable');
+    expect(stub.preview).toHaveLength(1);
+    const slice = text.slice(stub.preview[0].byteStart, stub.preview[0].byteEnd);
+    expect(slice).toBe('42');
+  });
+
+  test('preview captures nested composite as a single element', async () => {
+    // b's first element is a nested object — preview[0] should span the
+    // whole `{"x":1}`, not stop at its inner `,`.
+    const text = '{"a":{"b":[{"x":1},{"y":2}]}}';
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.a.b');
+    if (stub?.kind !== 'stub-array') throw new Error('unreachable');
+    const slice0 = text.slice(stub.preview[0].byteStart, stub.preview[0].byteEnd);
+    const slice1 = text.slice(stub.preview[1].byteStart, stub.preview[1].byteEnd);
+    expect(JSON.parse(slice0)).toEqual({ x: 1 });
+    expect(JSON.parse(slice1)).toEqual({ y: 2 });
+  });
+
+  test('escaped quotes inside string values do not confuse boundaries', async () => {
+    // Regression for the user-flagged fixture: a string value containing
+    // escaped quotes must not be treated as terminating the KV pair early.
+    const text =
+      '{"events":[{"id":0,"name":"has \\"escaped\\" quotes","kind":"click"}]}';
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.events[0]');
+    if (stub?.kind !== 'stub-object') throw new Error('unreachable');
+    expect(stub.preview).toHaveLength(3);
+    const slices = stub.preview.map(({ byteStart, byteEnd }) =>
+      text.slice(byteStart, byteEnd),
+    );
+    expect(slices[0]).toBe('"id":0');
+    expect(slices[1]).toBe('"name":"has \\"escaped\\" quotes"');
+    expect(slices[2]).toBe('"kind":"click"');
+    // Slicing each and wrapping back in braces yields valid JSON.
+    expect(JSON.parse('{' + slices.join(',') + '}')).toEqual({
+      id: 0,
+      name: 'has "escaped" quotes',
+      kind: 'click',
+    });
+  });
+
+  test('preview byte offsets are byte-correct under multibyte content', async () => {
+    // Multibyte content BEFORE the stub forces byte/char divergence. The
+    // preview offsets must point at byte positions (so slicing the encoded
+    // bytes gives valid JSON), not char positions.
+    const text = '{"hdr":"日本語","ev":[{"k":"你好","v":1}]}';
+    const bytes = new TextEncoder().encode(text);
+    const r = await parse(text);
+    const stub = findByPath(r.root, '$.ev[0]');
+    if (stub?.kind !== 'stub-object') throw new Error('unreachable');
+    const decoded = new TextDecoder().decode(
+      bytes.subarray(stub.preview[0].byteStart, stub.preview[0].byteEnd),
+    );
+    expect(decoded).toBe('"k":"你好"');
+  });
+});
+
 describe('parseStreaming — byte index', () => {
   test('every spine composite appears in byteIndex', async () => {
     // depth 0: $, depth 1: $.outer, depth 2: $.outer.mid (stub).

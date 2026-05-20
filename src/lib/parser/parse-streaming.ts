@@ -66,6 +66,13 @@ type Frame = ObjectFrame | ArrayFrame;
 // hasElement + commaCount together give exact childCount: commas + 1 if any
 // element was seen, else 0. Handles {}, [], single-element, n-element
 // uniformly.
+//
+// W3-Wed Part B: previewStarts/previewEnds collect byte ranges of the
+// first up-to-3 immediate children (KV pairs for objects, elements for
+// arrays). StubRow later slices sourceBlob with these to render an inline
+// preview. awaitingElement is the small state machine that distinguishes
+// "next token starts a new element" (true after open or after a COMMA at
+// depthAccum=1) from "we're inside an element" (false).
 type StubState = {
   kind: 'stub-object' | 'stub-array';
   key: string | null;
@@ -74,6 +81,9 @@ type StubState = {
   depthAccum: number;
   commaCount: number;
   hasElement: boolean;
+  previewStarts: number[];
+  previewEnds: number[];
+  awaitingElement: boolean;
 };
 
 export type ParseOptions = {
@@ -169,6 +179,23 @@ export async function parseStreaming(
       // The stub may have closed during this token; if so, materialize it
       // and exit stub mode.
       if (stub.depthAccum === 0) {
+        // Close out the final element's preview range if one was still
+        // open — the last element has no COMMA after it; it ends at the
+        // closing bracket's offset.
+        if (
+          !stub.awaitingElement &&
+          stub.previewEnds.length < stub.previewStarts.length
+        ) {
+          stub.previewEnds.push(info.offset + byteOffsetBase);
+        }
+        const preview: { byteStart: number; byteEnd: number }[] = [];
+        for (let i = 0; i < stub.previewEnds.length; i++) {
+          preview.push({
+            byteStart: stub.previewStarts[i],
+            byteEnd: stub.previewEnds[i],
+          });
+        }
+
         const childCount = stub.commaCount + (stub.hasElement ? 1 : 0);
         const stubNode: TreeNode =
           stub.kind === 'stub-object'
@@ -179,6 +206,7 @@ export async function parseStreaming(
                 byteStart: stub.byteStart,
                 byteEnd: info.offset + 1 + byteOffsetBase,
                 childCount,
+                preview,
               }
             : {
                 kind: 'stub-array',
@@ -187,6 +215,7 @@ export async function parseStreaming(
                 byteStart: stub.byteStart,
                 byteEnd: info.offset + 1 + byteOffsetBase,
                 childCount,
+                preview,
               };
         byteIndex.push([
           stubNode.path,
@@ -226,6 +255,9 @@ export async function parseStreaming(
             depthAccum: 1,
             commaCount: 0,
             hasElement: false,
+            previewStarts: [],
+            previewEnds: [],
+            awaitingElement: true,
           };
         } else {
           // Materialize a spine frame.
@@ -347,6 +379,37 @@ export async function parseStreaming(
   // ----- stub-mode token handler -----------------------------------------
 
   function handleStubToken(info: ParsedTokenInfo, s: StubState) {
+    // Preview tracking happens at depthAccum === 1 (immediate children of
+    // the stub). Must run BEFORE depth updates so we read the pre-update
+    // depth context. Caps starts at 3; ends always track to match.
+    if (s.depthAccum === 1) {
+      switch (info.token) {
+        case TokenType.COMMA:
+          if (
+            !s.awaitingElement &&
+            s.previewEnds.length < s.previewStarts.length
+          ) {
+            s.previewEnds.push(info.offset + byteOffsetBase);
+          }
+          s.awaitingElement = true;
+          break;
+        case TokenType.STRING:
+        case TokenType.NUMBER:
+        case TokenType.TRUE:
+        case TokenType.FALSE:
+        case TokenType.NULL:
+        case TokenType.LEFT_BRACE:
+        case TokenType.LEFT_BRACKET:
+          if (s.awaitingElement) {
+            if (s.previewStarts.length < 3) {
+              s.previewStarts.push(info.offset + byteOffsetBase);
+            }
+            s.awaitingElement = false;
+          }
+          break;
+      }
+    }
+
     switch (info.token) {
       case TokenType.LEFT_BRACE:
       case TokenType.LEFT_BRACKET:
