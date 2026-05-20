@@ -28,10 +28,15 @@ export type DocumentSource =
 type DocumentState = {
   text: string;
   source: DocumentSource;
+  // Original Blob (typically a dropped File) when one is available. Lets
+  // the streaming parser read bytes via .stream() without re-encoding the
+  // text string. Cleared on any setText that doesn't pass a file — typing
+  // in the editor invalidates the file's byte representation.
+  file: Blob | null;
 };
 
 type DocumentActions = {
-  setText: (text: string, source: DocumentSource) => void;
+  setText: (text: string, source: DocumentSource, file?: Blob | null) => void;
   clear: () => void;
 };
 
@@ -39,15 +44,18 @@ export const useDocumentStore = create<DocumentState & DocumentActions>()(
   immer((set) => ({
     text: '',
     source: null,
-    setText: (text, source) =>
+    file: null,
+    setText: (text, source, file = null) =>
       set((state) => {
         state.text = text;
         state.source = source;
+        state.file = file;
       }),
     clear: () =>
       set((state) => {
         state.text = '';
         state.source = null;
+        state.file = null;
       }),
   })),
 );

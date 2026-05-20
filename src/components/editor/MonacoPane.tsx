@@ -75,7 +75,11 @@ export function MonacoPane() {
 
     try {
       const content = await file.text();
-      setText(content, { kind: 'file', name: file.name });
+      // Pass the original File handle alongside the text. The streaming
+      // parser reads bytes via file.stream() instead of re-encoding the
+      // text string — saves a 50MB allocation on the parser pipeline and
+      // gives the worker the same bytes the user actually dropped.
+      setText(content, { kind: 'file', name: file.name }, file);
       setError(null);
     } catch {
       setError(`Failed to read file: ${file.name}`);

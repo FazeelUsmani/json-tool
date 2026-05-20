@@ -2,10 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
 import { useDocumentStore } from '@/state/documentStore';
 import { useViewStore } from '@/state/viewStore';
-import {
-  parseToTree,
-  type ParseTreeError,
-} from '@/lib/tree/parse';
+import { type ParseTreeError } from '@/lib/tree/parse';
 import { type FlatRow } from '@/lib/tree/flatten';
 import { findMatches } from '@/lib/tree/search';
 import { parseFile as parseFileStreaming } from '@/state/parserHost';
@@ -36,6 +33,7 @@ const ROW_HEIGHT = 24;
 
 export function TreeView() {
   const text = useDocumentStore((s) => s.text);
+  const file = useDocumentStore((s) => s.file);
   const setRoot = useViewStore((s) => s.setRoot);
   const flat = useViewStore((s) => s.flat);
   const closed = useViewStore((s) => s.closed);
@@ -54,17 +52,15 @@ export function TreeView() {
   const listRef = useListRef(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // W3-Mon opt-in: `?streaming=1` routes the parse through the worker-
-  // backed streaming spine parser instead of the synchronous parseToTree.
-  // Read once at mount; URL changes mid-session won't flip the path (the
-  // user can reload). The default path stays sync so a worker bug doesn't
-  // break the existing flow. Flag removed in W3-Wed once streaming is
-  // ready to be default.
-  const streamingEnabled = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('streaming') === '1';
-  }, []);
-
+  // W3-Wed close-out: streaming worker is the only parse path. Sync
+  // parseToTree was removed once the depth-2 spine + sampling validated
+  // out — anything above ~5MB hung the main thread on the old path, so
+  // there was no surviving reason to keep it as a fallback.
+  //
+  // Prefer the original dropped File when documentStore has one — lets
+  // the worker call file.stream() on the actual file bytes instead of
+  // re-encoding the editor text string. For pastes / URL loads / sample
+  // loads there's no File, so synthesize a Blob from the text.
   useEffect(() => {
     if (text.trim() === '') {
       setRoot(null);
@@ -72,51 +68,39 @@ export function TreeView() {
       return;
     }
 
-    if (streamingEnabled) {
-      let cancelled = false;
-      const handle = setTimeout(() => {
-        const blob = new Blob([text], { type: 'application/json' });
-        // Retain the blob in viewStore so expandStub can re-slice byte
-        // ranges later. Stored BEFORE the parse Promise resolves so a
-        // stub click that races the parse can still see a source.
-        setSourceBlob(blob);
-        parseFileStreaming(blob)
-          .then((result) => {
-            if (cancelled) return;
-            setRoot(result.root);
-            if (result.parseError) {
-              setParseError({
-                message: result.parseError.message,
-                line: result.parseError.line,
-                col: result.parseError.col,
-              });
-            } else {
-              setParseError(null);
-            }
-          })
-          .catch(() => {
-            // Worker termination on rapid re-parse rejects the prior
-            // Promise. That's the cancel path — don't surface it as a
-            // user-visible error.
-          });
-      }, PARSE_DEBOUNCE_MS);
-      return () => {
-        cancelled = true;
-        clearTimeout(handle);
-      };
-    }
-
+    let cancelled = false;
     const handle = setTimeout(() => {
-      const result = parseToTree(text);
-      if (result.ok) {
-        setRoot(result.root);
-        setParseError(null);
-      } else {
-        setParseError(result.error);
-      }
+      const source =
+        file ?? new Blob([text], { type: 'application/json' });
+      // Retain the blob in viewStore so expandStub can re-slice byte
+      // ranges later. Stored BEFORE the parse Promise resolves so a
+      // stub click that races the parse can still see a source.
+      setSourceBlob(source);
+      parseFileStreaming(source)
+        .then((result) => {
+          if (cancelled) return;
+          setRoot(result.root);
+          if (result.parseError) {
+            setParseError({
+              message: result.parseError.message,
+              line: result.parseError.line,
+              col: result.parseError.col,
+            });
+          } else {
+            setParseError(null);
+          }
+        })
+        .catch(() => {
+          // Worker termination on rapid re-parse rejects the prior
+          // Promise. That's the cancel path — don't surface it as a
+          // user-visible error.
+        });
     }, PARSE_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [text, setRoot, streamingEnabled]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [text, file, setRoot, setSourceBlob]);
 
   const { matchIndices, visibleSet } = useMemo(
     () => findMatches(flat, query),
