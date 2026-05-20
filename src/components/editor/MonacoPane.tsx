@@ -127,6 +127,11 @@ export function MonacoPane() {
               renderLineHighlight: 'gutter',
               largeFileOptimizations: true,
               automaticLayout: true,
+              // Suppress per-level indent guides — on a deep-nested doc
+              // (e.g. 150-level pathological fixture) they stack into a
+              // wall of vertical lines that drowns out the content.
+              guides: { indentation: false },
+              stickyScroll: { enabled: false },
             }}
           />
         </Suspense>
