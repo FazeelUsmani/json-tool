@@ -117,8 +117,13 @@ const api = {
         }
       }
     }
-    if (!searchAbortFlag.aborted && batch.length > 0) {
-      onBatch(batch, ranges.length);
+    if (!searchAbortFlag.aborted) {
+      // Always send a terminal tick at scanned===total — even if the
+      // tail had no matches, the main thread needs to see the final
+      // progress value so the percent reaches 100 before .then clears
+      // the progress state. Empty-batch case is a no-op on the match
+      // set, just bumps progress.
+      onBatch(batch.length > 0 ? batch : [], ranges.length);
     }
   },
 

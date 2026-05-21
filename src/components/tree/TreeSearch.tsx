@@ -97,10 +97,14 @@ export function TreeSearch({
 }
 
 // Compact "in-progress" label for the worker scan. Shows percent for
-// large scans where raw counts are hard to read at a glance.
+// large scans where raw counts are hard to read at a glance. Doesn't
+// cap at 99 — when the worker reports scanned===total the brief 100%
+// state is what we want before .then clears the progress entirely;
+// capping made "stuck at 99%" the user-visible state until the
+// spinner vanished.
 function formatScanProgress(p: { scanned: number; total: number }): string {
   if (p.total === 0) return '';
   if (p.total < 1000) return `${p.scanned}/${p.total}`;
-  const pct = Math.min(99, Math.floor((p.scanned / p.total) * 100));
+  const pct = Math.min(100, Math.floor((p.scanned / p.total) * 100));
   return `${pct}%`;
 }

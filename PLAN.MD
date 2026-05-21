@@ -419,7 +419,7 @@ Binary checklist (no "mostly"):
 - [ ] Name picked, **domain + GitHub org + npm scope + Twitter handle registered** (by Fri W2)
 - [x] Paste 1MB JSON → format → tree expands smoothly *(streaming worker handles paste path; Format/Minify/Sort buttons still synchronous on text)*
 - [x] **200MB JSON loads, renders spine, can navigate top 3 levels** *(2026-05-21: telemetry-900000.json 201MB → parseMs 5645–5800ms ≈ 34.7 MB/s, tab survives via viewer-only mode, tree populates with line/stub rows, expand-in-place works)*
-- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works *(parser is architecture-ready; untested at 500MB; no progress bar yet — depends on search slow path scope, task #73)*
+- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works *(2026-05-21: 200MB validated — search slow path shipped b52bec0 with progress bar; worker scan ~10s on 200MB telemetry, ~646K stub matches surfaced for "error". 500MB still untested at file level.)*
 - [ ] **200MB NDJSON loads, paginates by line, expand-line works** *(detection + line-offset index + LineRow lazy preview + drawer expansion shipped 2026-05-21 a07266f / 4f19364; in-place caret/Enter expansion shipped 8cd02d7; only validated on the 22KB and 43KB ndjson corpus fixtures — 200MB NDJSON fixture not yet generated/tested)*
 - [ ] Schema inference exports JSON Schema, TS, Zod from a 1MB JSON
 - [ ] `jsonrepair` fixes a deliberately-broken LLM JSON sample
