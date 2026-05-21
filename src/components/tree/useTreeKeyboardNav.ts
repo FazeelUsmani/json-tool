@@ -21,9 +21,11 @@ type Args = {
   setQuery: (query: string) => void;
   openDrawer: (row: FlatRow) => void;
   containerRef: RefObject<HTMLDivElement | null>;
-  // W3-Mon stub expansion: → / Enter on a stub row triggers expansion;
+  // W3-Mon stub expansion + W3-Thu NDJSON line expansion: → / Enter on a
+  // stub OR line row triggers expansion. Both kinds carry byte ranges
+  // and share the same useStubExpansion flow.
   // ESC during expansion aborts and clears the pending paths.
-  expandStubRow: (row: Extract<FlatRow, { kind: 'stub' }>) => void;
+  expandStubRow: (row: Extract<FlatRow, { kind: 'stub' | 'line' }>) => void;
   expandingPaths: Set<string>;
   clearExpanding: (path: string) => void;
 };
@@ -86,11 +88,11 @@ export function useTreeKeyboardNav({
   const handleArrowRight = () => {
     if (focusedIndex === null) return;
     const row = flat[focusedIndex];
-    if (row.kind === 'stub') {
+    if (row.kind === 'stub' || row.kind === 'line') {
       // Mirrors → on a collapsed composite: trigger expansion. Focus stays
-      // on the stub row; user presses → again after materialization to
-      // descend into the first child (keeps the "→ to expand, → to enter"
-      // mental model consistent across spine + stub composites).
+      // on the row; user presses → again after materialization to descend
+      // into the first child. Lines and stubs share the same expansion
+      // flow (useStubExpansion) — same UX contract.
       if (!expandingPaths.has(row.id)) expandStubRow(row);
       return;
     }
@@ -115,10 +117,10 @@ export function useTreeKeyboardNav({
     const row = flat[focusedIndex];
     if (row.kind === 'open') {
       toggle(row.id);
-    } else if (row.kind === 'stub') {
-      // Enter on a stub triggers expansion. Drawer is NOT opened — the
-      // drawer's "Expand subtree" button is the alt path, and opening
-      // both would just duplicate the request.
+    } else if (row.kind === 'stub' || row.kind === 'line') {
+      // Enter on a stub or line triggers in-place expansion. Drawer is
+      // NOT opened from Enter — info-icon click is the explicit drawer
+      // path, and opening both would just duplicate the request.
       if (!expandingPaths.has(row.id)) expandStubRow(row);
     } else if (row.kind === 'leaf') {
       openDrawer(row);

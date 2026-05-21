@@ -92,6 +92,57 @@ describe('spliceSubtree', () => {
     expect(result.children[2]).toBe(untouchedC);
   });
 
+  test('replaces ndjson-line with primitive while preserving the line index', () => {
+    // NDJSON v2 in-place expansion: a line whose content is `42` parses
+    // to a primitive TreeNode with key:null. spliceSubtree must restore
+    // the array index ("7") so the row continues to render as `[7]: 42`
+    // instead of dropping the index label.
+    const line: TreeNode = {
+      kind: 'ndjson-line',
+      key: '7',
+      path: '$[7]',
+      byteStart: 0,
+      byteEnd: 2,
+    };
+    const replacement: TreeNode = {
+      kind: 'number',
+      key: null,
+      path: '$[7]',
+      value: 42,
+    };
+    const root = arr(null, '$', [line]);
+    const result = spliceSubtree(root, '$[7]', replacement);
+    if (result.kind !== 'array') throw new Error('unreachable');
+    const child = result.children[0];
+    expect(child.kind).toBe('number');
+    expect(child.key).toBe('7');
+    expect(child.path).toBe('$[7]');
+    if (child.kind === 'number') expect(child.value).toBe(42);
+  });
+
+  test('replaces ndjson-line with materialized object', () => {
+    // Composite expansion path: line content `{"a":1}` produces an object
+    // root that replaces the ndjson-line.
+    const line: TreeNode = {
+      kind: 'ndjson-line',
+      key: '0',
+      path: '$[0]',
+      byteStart: 0,
+      byteEnd: 7,
+    };
+    const replacement = obj(null, '$[0]', [
+      leaf('a', '$[0].a', 1),
+    ]);
+    const root = arr(null, '$', [line]);
+    const result = spliceSubtree(root, '$[0]', replacement);
+    if (result.kind !== 'array') throw new Error('unreachable');
+    const child = result.children[0];
+    if (child.kind !== 'object') throw new Error('unreachable');
+    expect(child.key).toBe('0');
+    expect(child.path).toBe('$[0]');
+    expect(child.children).toHaveLength(1);
+  });
+
   test('preserves original key when replacement has key:null', () => {
     // Regression for the W3-Wed bug where expanding then collapsing an
     // array-element stub dropped its index label: worker's expandStub

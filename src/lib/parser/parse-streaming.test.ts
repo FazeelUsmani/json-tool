@@ -355,6 +355,27 @@ describe('parseStreaming — expansion (basePath + byteOffsetBase)', () => {
     expect(byteEnd).toBe(100 + subtreeText.length);
   });
 
+  test('primitive root with basePath adopts the path and key:null', async () => {
+    // NDJSON in-place expansion: a line whose content is just `42` parses
+    // to a primitive TreeNode rooted at the line's path. basePath drives
+    // the result's path; key stays null (spliceSubtree restores the
+    // original index/key on splice). Covers number / string / boolean /
+    // null variants since they share the primitive-root code path.
+    for (const [input, expected] of [
+      ['42', { kind: 'number', value: 42 }],
+      ['"hello"', { kind: 'string', value: 'hello' }],
+      ['true', { kind: 'boolean', value: true }],
+      ['null', { kind: 'null' }],
+    ] as const) {
+      const r = await parseStreaming(streamFromString(input), {
+        basePath: '$[7]',
+        byteOffsetBase: 1000,
+      });
+      expect(r.parseError).toBeUndefined();
+      expect(r.root).toMatchObject({ ...expected, key: null, path: '$[7]' });
+    }
+  });
+
   test('stubs inside expanded subtree carry rebased paths + shifted offsets', async () => {
     // The subtree itself contains depth-2 stubs (depth 2 within the slice).
     // Their paths should be under basePath; offsets in original-file

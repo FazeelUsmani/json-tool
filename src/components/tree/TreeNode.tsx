@@ -384,15 +384,17 @@ function LineRow({
   row: Extract<FlatRow, { kind: 'line' }>;
   flatIdx: number;
 }) {
-  const { query, openDrawer, setFocusedIndex } = useViewStore(
+  const { query, openDrawer, setFocusedIndex, isExpanding } = useViewStore(
     useShallow((s) => ({
       query: s.query,
       openDrawer: s.openDrawer,
       setFocusedIndex: s.setFocusedIndex,
+      isExpanding: s.expandingPaths.has(row.id),
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
   const sourceBlob = useViewStore((s) => s.sourceBlob);
+  const expand = useStubExpansion();
   const node = row.node;
 
   // Same module-level WeakMap caches as StubRow — different node kind
@@ -450,13 +452,17 @@ function LineRow({
       path={row.id}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
+      onToggle={isExpanding ? undefined : () => void expand(row)}
       onShowDetail={() => openDrawer(row)}
     >
-      <CaretSpacer />
+      <Caret open={false} />
       <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
       <span className="text-muted-foreground truncate">
         {previewText ?? '…'}
       </span>
+      {isExpanding && (
+        <Loader2 className="text-muted-foreground ml-1 size-3 animate-spin" />
+      )}
     </Row>
   );
 }
