@@ -2,16 +2,20 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
+import { MemoryHud } from '@/components/debug/MemoryHud';
+import { useDebugFlag } from '@/components/debug/useDebugFlag';
 
 // Hoisted from main.tsx + App.tsx so global providers wrap every route
 // (the App tool route AND the landing pages). Child routes render in
 // <Outlet/>.
 export function RootLayout() {
   useMonacoCancelSilencer();
+  const debug = useDebugFlag();
   return (
     <TooltipProvider delayDuration={200}>
       <Outlet />
       <Toaster />
+      {debug && <MemoryHud />}
     </TooltipProvider>
   );
 }
