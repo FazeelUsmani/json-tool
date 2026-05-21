@@ -65,16 +65,30 @@ The headline 200 MB fixture is a synthetic telemetry stream: 900,000 events, eac
 
 ### Parse + render
 
-Numbers below are single cold runs in production-bundle Chrome. We do not average across hot runs; cold is the user-relevant case for "I just dropped a file."
+Two columns: **JS-direct** (Node 20 running the parser code with no React / Comlink / postMessage, captured via `benchmarks/parser-direct.mjs`) and **browser** (the production-bundle cold-run protocol). The browser column is what users see; the JS-direct column is the parser's intrinsic throughput, useful for isolating where time goes.
 
-| Fixture                  | File size | parseMs | Throughput | Heap peak | Tab survived |
-|--------------------------|-----------|---------|------------|-----------|--------------|
-| `telemetry-170000.json`  | 38 MB     | ~600 ms | ~63 MB/s   | <250 MB   | ✓            |
-| `telemetry-900000.json`  | 201 MB    | 5645 ms | 35.6 MB/s  | <1.2 GB   | ✓            |
+| Fixture                       | Size   | JS-direct       | Browser          | Heap peak (browser) | Tab survived |
+|-------------------------------|--------|-----------------|------------------|---------------------|--------------|
+| `telemetry-170000.json`       | 38 MB  | 589 ms (64 MB/s)  | ~600 ms (~63 MB/s) | <250 MB             | ✓            |
+| `telemetry-900000.json`       | 201 MB | 3225 ms (62 MB/s) | 5645 ms (36 MB/s)  | <1.2 GB             | ✓            |
+| `telemetry-2250000.json`      | 505 MB | 8154 ms (62 MB/s) | *projected ~14 s* | *projected ~3 GB*   | *not run*    |
 
-The 201 MB number was measured twice on different days (5645ms, 5735ms), within run-to-run variance.
+**JS-direct is linear in file size at ~62 MB/s** across 38 → 505 MB, three orders of magnitude apart. Confirms the streaming parser doesn't hit any non-linear cost as files grow.
 
-For reference, the same parse runs **~3.3 s (61 MB/s)** under Node 20 with no React / Comlink / postMessage overhead — see `benchmarks/parser-direct.mjs` for the harness. The browser's ~1.8× slowdown is attributable to worker postMessage of the parsed tree (~225 MB structured-clone) plus React's render of the resulting FlatRow array. We accepted this as the actual cost of the viewer; future optimization (typed-array transfer, worker-side flatten) is tracked but out of scope for the launch claim.
+The browser column shows a consistent ~1.7–1.8× slowdown vs JS-direct, attributable to worker postMessage of the parsed tree (~225 MB structured-clone on the 201 MB fixture) plus React's render of the FlatRow array. We accepted this as the cost of the viewer; future optimization (typed-array transfer, worker-side flatten) is tracked but out of scope for the launch claim.
+
+The 505 MB browser row is a *projection*: 1.75× of JS-direct ≈ 14 seconds. We need a real browser cold-run on the 505 MB fixture (file: `benchmarks/corpus/telemetry-2250000.json`, generated 2026-05-21) before quoting a 500 MB number on any marketing surface. **PLAN.MD's "500 MB JSON loads in <60 s" criterion is supported by the architecture but not yet directly measured.**
+
+#### NDJSON
+
+NDJSON parsing is just newline scanning + node emit (no JSON tokenization per line) — substantially faster than regular-JSON parsing for the same file size.
+
+| Fixture                       | Size   | JS-direct       | Browser            |
+|-------------------------------|--------|-----------------|--------------------|
+| `telemetry-100.ndjson`        | 22 KB  | 1 ms (noisy)    | *not run* (instant)|
+| `telemetry-900000.ndjson`     | 201 MB | 313 ms (643 MB/s) | *projected ~600 ms* |
+
+JS-direct measured via `benchmarks/ndjson-direct.mjs`. The 643 MB/s number is the line-index + node-emit cost only; subsequent search uses the same byte-level worker scan as regular-JSON stubs.
 
 ### Search
 
@@ -101,11 +115,12 @@ LCP element is the viewer-only placeholder when a file >10 MB drops; the Hint co
 
 ## What's NOT measured (yet)
 
-- **500 MB regular JSON**: file architecture supports it (streaming worker + spine + stubs), but we haven't run it cold. Public claim ceiling is 500 MB per PLAN.MD; this needs to be measured before any marketing surface quotes 500 MB.
-- **200 MB NDJSON**: the v1 + v2 NDJSON code paths shipped today, but the 200 MB NDJSON fixture isn't generated yet. Only validated against 22 KB and 43 KB fixtures.
+- **500 MB regular JSON in browser**: JS-direct measurement now exists (8.2 s @ 62 MB/s, linear with smaller fixtures); browser projection is ~14 s but unverified. Fixture `telemetry-2250000.json` is generated and committed-ignored in `benchmarks/corpus/`. Browser cold-run is the remaining gap before the 500 MB claim is launch-quotable.
+- **200 MB NDJSON in browser**: JS-direct measured (313 ms @ 643 MB/s); fixture `telemetry-900000.ndjson` is generated. Browser cold-run still needed to confirm the in-place expand / line-rendering UX at scale.
+- **Search wall-clock in browser**: byte-level rewrite ships in `c3a0747`; projected 1.5–2.5 s on the 201 MB fixture but not yet stopwatched. Subjectively "search was nice" reported but no exact number captured.
 - **Multiple browsers**: only Chrome 147 measured. Safari and Firefox have different Worker / Blob / structured-clone characteristics; they need separate runs.
 - **Non-Apple-Silicon hardware**: M-series is the developer machine. Intel Macs and Windows laptops are not yet in the matrix.
-- **Lighthouse scores**: not yet run on the 4 SEO routes. PLAN.MD verification requires 90+.
+- **Lighthouse scores**: PLAN.MD verification requires 90+. CLI runs against `pnpm preview` fail with "Page.navigate: Target closed" in headless mode — likely SW + SPA interaction; needs a real Chrome instance (or a headless config tweak we haven't pinned down). Tracked separately.
 
 When any of these land, the table above gets a new row.
 
@@ -152,10 +167,15 @@ node benchmarks/parser-direct.mjs   # JS-direct measurement, prints MB/s
 
 ## Version + commit pinning
 
-Numbers above were captured against:
+JS-direct numbers (Node, captured 2026-05-21) were measured against:
+
+- `main` at HEAD (post-`c3a0747`)
+- `benchmarks/parser-direct.mjs` for regular JSON, `benchmarks/ndjson-direct.mjs` for NDJSON
+
+Browser numbers (Chrome 147 + production bundle, captured 2026-05-21) were measured against:
 
 - `main` at commit `c3a0747` (perf: byte-level scan)
 - Bundle hash `app-DA5w-5ec.js` + `parser.worker-CjM5ryyQ.js`
-- Vite 7 production build
+- Vite 7 production build, `pnpm preview` on :4174
 
 When the methodology or fixture shapes change, this page gets a new dated section above; old rows stay so claims at the launch date stay verifiable.

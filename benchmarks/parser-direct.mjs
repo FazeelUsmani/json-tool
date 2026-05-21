@@ -225,6 +225,7 @@ function parseStreaming(buf) {
 const FIXTURES = [
   'benchmarks/corpus/telemetry-170000.json', // ~38MB
   'benchmarks/corpus/telemetry-900000.json', // ~201MB
+  'benchmarks/corpus/telemetry-2250000.json', // ~505MB
 ];
 
 for (const FIXTURE of FIXTURES) {
