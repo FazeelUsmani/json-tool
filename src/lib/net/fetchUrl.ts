@@ -160,11 +160,16 @@ export async function fetchUrl(
 
   clearTimeout(timeoutHandle);
 
-  // `bytes` is the server-declared length when available, falling back to JS
-  // string length (UTF-16 code units, not strict UTF-8 bytes). Good enough for
-  // UI display; if the caller needs exact byte count they can run TextEncoder.
+  // `bytes` is the server-declared length when available, falling back to
+  // a true UTF-8 byte count via TextEncoder. The old fallback used
+  // `text.length` (UTF-16 code units) — for ASCII content that matches,
+  // but for multibyte (CJK, emoji) it underestimates the byte size by
+  // up to 3×, which lets oversized loads slip past the viewer-only-mode
+  // threshold check downstream.
   const declared = contentLengthHeader != null ? Number(contentLengthHeader) : NaN;
-  const bytes = Number.isFinite(declared) ? declared : text.length;
+  const bytes = Number.isFinite(declared)
+    ? declared
+    : new TextEncoder().encode(text).byteLength;
 
   return {
     ok: true,

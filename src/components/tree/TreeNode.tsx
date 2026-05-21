@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useMemo } from 'react';
 import { Copy, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,6 +12,7 @@ import { copyText } from '@/lib/clipboard';
 import { highlight } from '@/lib/tree/highlight';
 import { useViewStore } from '@/state/viewStore';
 import { useStubExpansion } from '@/state/useStubExpansion';
+import { useStubPreview, type PreviewRange } from './useStubPreview';
 
 type PrimitiveNode = Extract<
   TreeNodeData,
@@ -153,73 +154,16 @@ function CloseRow({
   );
 }
 
-// Renders a depth >= MAX_SPINE_DEPTH composite that hasn't been materialized yet. Visually
-// matches OpenRow's collapsed state — caret + key + bracketed-elide + count
-// pill — but has no toggle handler. Step 7 wires click-to-expand via
-// parserHost.expandStub; until then the row is focusable / copyable /
-// drawer-openable but inert otherwise.
 // Cap on the inline preview slice length (in bytes). A single string-valued
 // element can be megabytes; reading + decoding that per visible row blocks
 // scrolling. Anything past this falls back to `{ … }`. CSS overflow handles
 // medium-long previews (200-byte JSON usually wraps fine in a 24px row).
 const STUB_PREVIEW_MAX_BYTES = 256;
 
-// Two-tier module-level cache, both keyed by sourceBlob ref so new file
-// loads GC their caches automatically (WeakMap).
-//
-// `stubPreviewCache` — resolved text, used for synchronous reads in the
-// useState init and the row-recycle reset path.
-// `stubPreviewLoaders` — in-flight Promises, so virtualization-recycled
-// rows that re-mount before their first slice resolves can JOIN the
-// existing decode instead of kicking off a duplicate one. This is what
-// closed the first-mount-window bareness: previously the slice's
-// resolution was discarded by cleanup before setPreviewText could fire,
-// and the next mount had no signal that a slice was already running.
-const stubPreviewCache = new WeakMap<Blob, Map<string, string>>();
-const stubPreviewLoaders = new WeakMap<Blob, Map<string, Promise<string>>>();
-
-function getCachedStubPreview(blob: Blob, id: string): string | undefined {
-  return stubPreviewCache.get(blob)?.get(id);
-}
-
-function setCachedStubPreview(blob: Blob, id: string, text: string): void {
-  let inner = stubPreviewCache.get(blob);
-  if (!inner) {
-    inner = new Map();
-    stubPreviewCache.set(blob, inner);
-  }
-  inner.set(id, text);
-}
-
-function getStubPreviewLoader(
-  blob: Blob,
-  id: string,
-): Promise<string> | undefined {
-  return stubPreviewLoaders.get(blob)?.get(id);
-}
-
-function setStubPreviewLoader(
-  blob: Blob,
-  id: string,
-  loader: Promise<string>,
-): void {
-  let inner = stubPreviewLoaders.get(blob);
-  if (!inner) {
-    inner = new Map();
-    stubPreviewLoaders.set(blob, inner);
-  }
-  inner.set(id, loader);
-}
-
-function clearStubPreviewLoader(blob: Blob, id: string): void {
-  const inner = stubPreviewLoaders.get(blob);
-  if (!inner) return;
-  inner.delete(id);
-  // Drop the outer entry too once empty — the Blob is still referenced
-  // (sourceBlob lives in viewStore) so the WeakMap wouldn't auto-evict.
-  if (inner.size === 0) stubPreviewLoaders.delete(blob);
-}
-
+// Renders a depth >= MAX_SPINE_DEPTH composite that hasn't been materialized
+// yet. Visually matches OpenRow's collapsed state — caret + key + bracketed
+// preview-or-elide + count pill. Click / Enter / → all expand via
+// useStubExpansion.
 function StubRow({
   row,
   flatIdx,
@@ -243,68 +187,17 @@ function StubRow({
   const openCh = isObj ? '{' : '[';
   const closeCh = isObj ? '}' : ']';
 
-  // Lazy-load the preview text by slicing sourceBlob from the first
-  // preview range's start to the last range's end (the commas between
-  // ranges come along for free — they're between the captured element
-  // bounds in the source). Decoded text caches at module level so a row
-  // that unmounts mid-decode (virtualization scrolls fast) doesn't lose
-  // its result — the next mount hits the cache immediately.
-  const [previewText, setPreviewText] = useState<string | null>(() =>
-    sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
-  );
-  // Derived-state-from-props pattern: react-window recycles the same
-  // <StubRow> instance for different rows during scroll. useState retains
-  // the previous occupant's previewText across that prop change, so the
-  // recycled row would render the wrong preview for one frame before the
-  // useEffect below re-fired. Reset synchronously on row.id change so
-  // the stale text never reaches the DOM.
-  const [prevRowId, setPrevRowId] = useState(row.id);
-  if (prevRowId !== row.id) {
-    setPrevRowId(row.id);
-    setPreviewText(
-      sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
-    );
-  }
-  useEffect(() => {
-    if (!sourceBlob || node.preview.length === 0) {
-      setPreviewText(null);
-      return;
-    }
-    const cached = getCachedStubPreview(sourceBlob, row.id);
-    if (cached !== undefined) {
-      setPreviewText(cached);
-      return;
-    }
+  // Decide the preview byte range — null when the stub has no captured
+  // children or the span exceeds the per-row cap. useStubPreview handles
+  // the rest (cache + Promise-join + cleanup).
+  const previewRange = useMemo<PreviewRange | null>(() => {
+    if (node.preview.length === 0) return null;
     const start = node.preview[0].byteStart;
     const end = node.preview[node.preview.length - 1].byteEnd;
-    if (end - start > STUB_PREVIEW_MAX_BYTES) {
-      setPreviewText(null);
-      return;
-    }
-    // Join an in-flight slice for this same row, or kick off a new one
-    // and register it so concurrent / re-mounted instances can attach
-    // to the same decode instead of spawning a duplicate.
-    let loader = getStubPreviewLoader(sourceBlob, row.id);
-    if (loader === undefined) {
-      loader = sourceBlob.slice(start, end).text();
-      setStubPreviewLoader(sourceBlob, row.id, loader);
-    }
-    let cancelled = false;
-    loader
-      .then((text) => {
-        setCachedStubPreview(sourceBlob, row.id, text);
-        clearStubPreviewLoader(sourceBlob, row.id);
-        if (!cancelled) setPreviewText(text);
-      })
-      .catch(() => {
-        // Drop the failed loader so the next mount can retry instead of
-        // re-awaiting a permanently-rejected Promise.
-        clearStubPreviewLoader(sourceBlob, row.id);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceBlob, node.preview, row.id]);
+    if (end - start > STUB_PREVIEW_MAX_BYTES) return null;
+    return { byteStart: start, byteEnd: end };
+  }, [node.preview]);
+  const previewText = useStubPreview(sourceBlob, row.id, previewRange);
 
   return (
     <Row
@@ -397,54 +290,18 @@ function LineRow({
   const expand = useStubExpansion();
   const node = row.node;
 
-  // Same module-level WeakMap caches as StubRow — different node kind
-  // but the path-keyed text-cache abstraction is identical, no reason
-  // to duplicate.
-  const [previewText, setPreviewText] = useState<string | null>(() =>
-    sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
-  );
-  const [prevRowId, setPrevRowId] = useState(row.id);
-  if (prevRowId !== row.id) {
-    setPrevRowId(row.id);
-    setPreviewText(
-      sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
-    );
-  }
-
-  useEffect(() => {
-    if (!sourceBlob) {
-      setPreviewText(null);
-      return;
-    }
-    const cached = getCachedStubPreview(sourceBlob, row.id);
-    if (cached !== undefined) {
-      setPreviewText(cached);
-      return;
-    }
+  // Lines can be arbitrarily long; clamp to the first N bytes for the
+  // inline preview (full content is in the detail drawer). useStubPreview
+  // handles cache + Promise-join + cleanup.
+  const previewRange = useMemo<PreviewRange>(() => {
     const span = node.byteEnd - node.byteStart;
     const sliceEnd =
       span > NDJSON_LINE_PREVIEW_MAX_BYTES
         ? node.byteStart + NDJSON_LINE_PREVIEW_MAX_BYTES
         : node.byteEnd;
-    let loader = getStubPreviewLoader(sourceBlob, row.id);
-    if (loader === undefined) {
-      loader = sourceBlob.slice(node.byteStart, sliceEnd).text();
-      setStubPreviewLoader(sourceBlob, row.id, loader);
-    }
-    let cancelled = false;
-    loader
-      .then((text) => {
-        setCachedStubPreview(sourceBlob, row.id, text);
-        clearStubPreviewLoader(sourceBlob, row.id);
-        if (!cancelled) setPreviewText(text);
-      })
-      .catch(() => {
-        clearStubPreviewLoader(sourceBlob, row.id);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceBlob, node.byteStart, node.byteEnd, row.id]);
+    return { byteStart: node.byteStart, byteEnd: sliceEnd };
+  }, [node.byteStart, node.byteEnd]);
+  const previewText = useStubPreview(sourceBlob, row.id, previewRange);
 
   return (
     <Row

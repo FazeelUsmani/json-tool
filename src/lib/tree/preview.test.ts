@@ -76,18 +76,73 @@ describe('previewChildValue', () => {
     expect(previewChildValue(nul(null, '$'))).toBe('null');
   });
 
-  test('composite values collapse to placeholders, not recursive content', () => {
+  test('object at depth 0 collapses to placeholder (no recurse into object)', () => {
     expect(previewChildValue(obj(null, '$', [num('x', '$.x', 1)]))).toBe(
       '{…}',
     );
-    expect(previewChildValue(arr(null, '$', [num('0', '$[0]', 1)]))).toBe(
-      '[…]',
-    );
   });
 
-  test('stub variants collapse the same as their materialized counterparts', () => {
+  test('array at depth 0 recurses one level into its elements', () => {
+    // Array of primitives renders the values directly.
+    expect(previewChildValue(arr(null, '$', [num('0', '$[0]', 1)]))).toBe(
+      '[1]',
+    );
+    expect(
+      previewChildValue(
+        arr(null, '$', [
+          num('0', '$[0]', 1),
+          num('1', '$[1]', 2),
+          num('2', '$[2]', 3),
+        ]),
+      ),
+    ).toBe('[1, 2, 3]');
+  });
+
+  test('array of objects recurses into each element showing first KV', () => {
+    // The headline use case for the recursion: 900K array elements that
+    // would render as `[{…}, {…}, …]` before, now show first key.
+    const n = arr(null, '$', [
+      obj('0', '$[0]', [
+        num('id', '$[0].id', 0),
+        str('name', '$[0].name', 'click'),
+      ]),
+      obj('1', '$[1]', [num('id', '$[1].id', 1)]),
+    ]);
+    // First object inside the array shows "id":0 + ", …" because it has
+    // two children (id + name). Second has one child so no trailing dots.
+    expect(previewChildValue(n)).toBe('[{"id":0, …}, {"id":1}]');
+  });
+
+  test('array recursion caps at 3 elements with trailing ellipsis', () => {
+    const n = arr(null, '$', [
+      num('0', '$[0]', 1),
+      num('1', '$[1]', 2),
+      num('2', '$[2]', 3),
+      num('3', '$[3]', 4),
+      num('4', '$[4]', 5),
+    ]);
+    expect(previewChildValue(n)).toBe('[1, 2, 3, …]');
+  });
+
+  test('deeply nested arrays do not run away — depth-2 collapses to `[…]`', () => {
+    // Array of arrays: outer recurses (depth 0 → 1); inner doesn't
+    // (depth 1 already inside an array).
+    const inner = arr('0', '$[0]', [num('0', '$[0][0]', 1)]);
+    const outer = arr(null, '$', [inner]);
+    expect(previewChildValue(outer)).toBe('[[…]]');
+  });
+
+  test('empty array / empty object stay as `[]` / `{…}`', () => {
+    expect(previewChildValue(arr(null, '$', []))).toBe('[…]');
+    expect(previewChildValue(obj(null, '$', []))).toBe('{…}');
+  });
+
+  test('stub variants always collapse regardless of array context', () => {
     expect(previewChildValue(stubObj('a', '$.a'))).toBe('{…}');
     expect(previewChildValue(stubArr('a', '$.a'))).toBe('[…]');
+    // Even inside an outer array recursion, the stub child stays shorthand.
+    const arrWithStub = arr(null, '$', [stubObj('0', '$[0]')]);
+    expect(previewChildValue(arrWithStub)).toBe('[{…}]');
   });
 });
 
@@ -124,14 +179,20 @@ describe('previewFromChildren', () => {
     expect(previewFromChildren(n)).toBe('"a":1, "b":2, "c":3');
   });
 
-  test('nested composites show as `{…}` / `[…]` not recursive content', () => {
+  test('nested objects show as `{…}`; nested arrays recurse one level', () => {
+    // The previewChildValue rule: object values stay shorthand,
+    // arrays show their first elements. So a top-level object containing
+    // both renders the array's content but not the object's.
     const n = obj(null, '$', [
       str('timestamp', '$.timestamp', '2023-11-14'),
       obj('user', '$.user', [str('id', '$.user.id', 'u_0')]),
-      arr('tags', '$.tags', [str('0', '$.tags[0]', 't1')]),
+      arr('tags', '$.tags', [
+        str('0', '$.tags[0]', 't1'),
+        str('1', '$.tags[1]', 't2'),
+      ]),
     ]);
     expect(previewFromChildren(n)).toBe(
-      '"timestamp":"2023-11-14", "user":{…}, "tags":[…]',
+      '"timestamp":"2023-11-14", "user":{…}, "tags":["t1", "t2"]',
     );
   });
 
