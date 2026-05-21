@@ -118,6 +118,31 @@ export function abort(): void {
   void api?.abort();
 }
 
+// Wraps the worker's searchStubs scan. Used by TreeView when the search
+// query changes — the synchronous findMatches gets key/leaf matches
+// instantly; this worker pass adds content matches inside collapsed
+// stubs and NDJSON lines that findMatches can't see. Streaming via
+// `onBatch`: every ~2000 ranges scanned the worker posts a batch of
+// matching paths + scanned count, the main thread merges them into
+// viewStore.stubSearchMatches and updates progress.
+export async function searchStubs(
+  file: Blob,
+  ranges: readonly {
+    path: string;
+    byteStart: number;
+    byteEnd: number;
+  }[],
+  needle: string,
+  onBatch: (batch: { path: string }[], scanned: number) => void,
+): Promise<void> {
+  const remote = ensureWorker();
+  await remote.searchStubs(file, ranges, needle, Comlink.proxy(onBatch));
+}
+
+export function abortSearch(): void {
+  void api?.abortSearch();
+}
+
 // beforeunload cleanup: terminate so File handles release promptly. Cheap
 // insurance — workers normally die with the tab but Safari has been known
 // to delay cleanup, which can leak the open File reference.

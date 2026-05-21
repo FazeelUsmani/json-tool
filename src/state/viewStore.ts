@@ -67,6 +67,18 @@ type ViewState = {
   // Drives parser dispatch (JSON streaming spine vs NDJSON line index)
   // and the LineRow/StubRow render branch via the FlatRow shape.
   parseMode: 'json' | 'ndjson';
+  // Paths of stubs / NDJSON lines that the worker's content scan found
+  // matching the current query. Kept separate from `matchIndices`
+  // (returned by sync findMatches) so the two paths can evolve
+  // independently — e.g., a future "deep matches" highlight color
+  // doesn't need to re-derive which matches came from which source.
+  // Cleared on query change; rebuilt incrementally as the worker
+  // streams batches back.
+  stubSearchMatches: Set<string>;
+  // Progress state for the active worker search. null when no search
+  // is running. TreeSearch reads this to show "Scanning N / M" + a
+  // cancel affordance.
+  stubSearchProgress: { scanned: number; total: number } | null;
 };
 
 type ViewActions = {
@@ -79,6 +91,14 @@ type ViewActions = {
   setExpanding: (path: string, value: boolean) => void;
   setSourceBlob: (blob: Blob | null) => void;
   setParseMode: (mode: 'json' | 'ndjson') => void;
+  // Bulk-add paths from a worker search batch.
+  addStubSearchMatches: (paths: readonly string[]) => void;
+  setStubSearchProgress: (
+    progress: { scanned: number; total: number } | null,
+  ) => void;
+  // Drop all stub-search state in one transaction. Called when the
+  // query becomes empty or the source blob changes.
+  clearStubSearch: () => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
@@ -92,6 +112,8 @@ export const useViewStore = create<ViewState & ViewActions>()(
     expandingPaths: new Set<string>(),
     sourceBlob: null,
     parseMode: 'json' as const,
+    stubSearchMatches: new Set<string>(),
+    stubSearchProgress: null,
     setRoot: (root) =>
       set((state) => {
         const newFlat = root === null ? [] : flattenTree(root);
@@ -152,6 +174,19 @@ export const useViewStore = create<ViewState & ViewActions>()(
     setParseMode: (mode) =>
       set((state) => {
         state.parseMode = mode;
+      }),
+    addStubSearchMatches: (paths) =>
+      set((state) => {
+        for (const p of paths) state.stubSearchMatches.add(p);
+      }),
+    setStubSearchProgress: (progress) =>
+      set((state) => {
+        state.stubSearchProgress = progress;
+      }),
+    clearStubSearch: () =>
+      set((state) => {
+        state.stubSearchMatches = new Set<string>();
+        state.stubSearchProgress = null;
       }),
   })),
 );

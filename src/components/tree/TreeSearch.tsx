@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useViewStore } from '@/state/viewStore';
@@ -19,6 +19,7 @@ export function TreeSearch({
 }) {
   const query = useViewStore((s) => s.query);
   const setQuery = useViewStore((s) => s.setQuery);
+  const stubSearchProgress = useViewStore((s) => s.stubSearchProgress);
   const [localQuery, setLocalQuery] = useState(query);
 
   useEffect(() => {
@@ -62,6 +63,15 @@ export function TreeSearch({
           <span className="text-muted-foreground text-xs tabular-nums">
             {matchCount === 0 ? '0' : currentMatch + 1} / {matchCount}
           </span>
+          {stubSearchProgress && (
+            <span
+              className="text-muted-foreground flex items-center gap-1 text-xs tabular-nums"
+              title={`Scanning collapsed stubs: ${stubSearchProgress.scanned.toLocaleString()} of ${stubSearchProgress.total.toLocaleString()}`}
+            >
+              <Loader2 className="size-3 animate-spin" />
+              {formatScanProgress(stubSearchProgress)}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon-xs"
@@ -84,4 +94,13 @@ export function TreeSearch({
       )}
     </div>
   );
+}
+
+// Compact "in-progress" label for the worker scan. Shows percent for
+// large scans where raw counts are hard to read at a glance.
+function formatScanProgress(p: { scanned: number; total: number }): string {
+  if (p.total === 0) return '';
+  if (p.total < 1000) return `${p.scanned}/${p.total}`;
+  const pct = Math.min(99, Math.floor((p.scanned / p.total) * 100));
+  return `${pct}%`;
 }

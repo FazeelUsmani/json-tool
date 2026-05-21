@@ -9,24 +9,76 @@
 //
 // Match target: keys + string/number/bool values. `null` skipped. Close rows
 // don't match (no semantic content).
+//
+// W3-Thu+ deep matches: when `stubSearchMatches` is provided, any stub or
+// ndjson-line row whose path is in the set is also counted as a match.
+// That path comes from the worker's searchStubs scan — it sees content
+// inside collapsed stubs that the sync FlatRow walk can't reach. Folded
+// into the same matchIndices array so the existing N/M count + jump-to-
+// next-match UX absorbs deep matches without a parallel data structure.
 
 import type { FlatRow } from './flatten';
+import type { TreeNode } from './parse';
+
+/**
+ * Walks a TreeNode tree and emits the byte ranges of every stub-object,
+ * stub-array, and ndjson-line node — the kinds whose content isn't in
+ * FlatRow and therefore is invisible to the synchronous findMatches.
+ * Used to feed the worker's searchStubs scan.
+ *
+ * Includes empty stubs (childCount=0) since their byte range still
+ * decodes to `{}` / `[]` — harmless to scan, easier than filtering.
+ */
+export function collectStubRanges(
+  root: TreeNode | null,
+): { path: string; byteStart: number; byteEnd: number }[] {
+  const out: { path: string; byteStart: number; byteEnd: number }[] = [];
+  if (!root) return out;
+  walk(root, out);
+  return out;
+}
+
+function walk(
+  node: TreeNode,
+  out: { path: string; byteStart: number; byteEnd: number }[],
+): void {
+  if (
+    node.kind === 'stub-object' ||
+    node.kind === 'stub-array' ||
+    node.kind === 'ndjson-line'
+  ) {
+    out.push({
+      path: node.path,
+      byteStart: node.byteStart,
+      byteEnd: node.byteEnd,
+    });
+    return;
+  }
+  if (node.kind === 'object' || node.kind === 'array') {
+    for (const c of node.children) walk(c, out);
+  }
+}
 
 export type SearchResult = {
   matchIndices: number[];          // flat-array indices of matched rows
   visibleSet: Set<number>;         // flat-array indices of rows to render
 };
 
-export function findMatches(flat: FlatRow[], query: string): SearchResult {
+export function findMatches(
+  flat: FlatRow[],
+  query: string,
+  stubSearchMatches?: ReadonlySet<string>,
+): SearchResult {
   if (query === '') {
     return { matchIndices: [], visibleSet: new Set() };
   }
   const needle = query.toLowerCase();
+  const deep = stubSearchMatches;
   const matchIndices: number[] = [];
   const visibleSet = new Set<number>();
 
   for (let i = 0; i < flat.length; i++) {
-    if (!rowMatches(flat[i], needle)) continue;
+    if (!rowMatches(flat[i], needle, deep)) continue;
     matchIndices.push(i);
     visibleSet.add(i);
     // Walk ancestors via parentIndex chain
@@ -60,12 +112,22 @@ export function findMatches(flat: FlatRow[], query: string): SearchResult {
   return { matchIndices, visibleSet };
 }
 
-function rowMatches(row: FlatRow, needle: string): boolean {
+function rowMatches(
+  row: FlatRow,
+  needle: string,
+  deep: ReadonlySet<string> | undefined,
+): boolean {
   if (row.kind === 'close') return false;
   // Key match — applies to open rows (composites) and leaf rows (primitives
   // or empty composites). Root has key === null, can't key-match.
   const key = row.node.key;
   if (key !== null && key.toLowerCase().includes(needle)) return true;
+  // Deep match — stubs and lines whose worker-decoded content includes the
+  // needle. Path-keyed so a stub at $.events[42] that contains "error"
+  // surfaces here without our needing to materialize it client-side.
+  if ((row.kind === 'stub' || row.kind === 'line') && deep?.has(row.id)) {
+    return true;
+  }
   // Value match — only primitives, only leaves.
   if (row.kind !== 'leaf') return false;
   const node = row.node;

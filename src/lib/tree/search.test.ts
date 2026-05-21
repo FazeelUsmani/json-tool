@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findMatches } from './search';
+import { collectStubRanges, findMatches } from './search';
 import { flattenTree } from './flatten';
 import { parseToTree, type TreeNode } from './parse';
 
@@ -7,6 +7,33 @@ function flat(text: string) {
   const r = parseToTree(text);
   if (!r.ok) throw new Error('test fixture must be valid JSON');
   return flattenTree(r.root as TreeNode);
+}
+
+// Synthesizes a tree shaped like the streaming parser's output: a root
+// composite whose children are stubs / ndjson-lines. Used by the
+// deep-search tests below so they don't depend on parseStreaming.
+function tree(children: TreeNode[]): TreeNode {
+  return { kind: 'array', key: null, path: '$', children };
+}
+function stubObj(idx: number, byteStart: number, byteEnd: number): TreeNode {
+  return {
+    kind: 'stub-object',
+    key: String(idx),
+    path: `$[${idx}]`,
+    byteStart,
+    byteEnd,
+    childCount: 0,
+    preview: [],
+  };
+}
+function ndjsonLine(idx: number, byteStart: number, byteEnd: number): TreeNode {
+  return {
+    kind: 'ndjson-line',
+    key: String(idx),
+    path: `$[${idx}]`,
+    byteStart,
+    byteEnd,
+  };
 }
 
 describe('findMatches', () => {
@@ -92,6 +119,45 @@ describe('findMatches', () => {
     expect(r.visibleSet.has(4)).toBe(true);
   });
 
+  test('stubSearchMatches surfaces stub-row content matches in matchIndices', () => {
+    // Synthesize a flat row array where one row is a stub. The sync key/
+    // value matcher misses content inside the stub; the deep-search Set
+    // bridges that.
+    const root = tree([stubObj(0, 10, 50), stubObj(1, 60, 100)]);
+    const f = flattenTree(root);
+    // Sanity: stub rows have kind:'stub' in the flat array.
+    expect(f.find((r) => r.id === '$[0]')?.kind).toBe('stub');
+    // Without deep set: no match for "rare-content" (not in any key).
+    const empty = findMatches(f, 'rare-content');
+    expect(empty.matchIndices).toEqual([]);
+    // With deep set including $[1]'s path: that row becomes a match
+    // and its ancestor ($) is pulled into visibleSet.
+    const deep = findMatches(f, 'rare-content', new Set(['$[1]']));
+    expect(deep.matchIndices).toHaveLength(1);
+    expect(f[deep.matchIndices[0]].id).toBe('$[1]');
+    expect(deep.visibleSet.has(0)).toBe(true); // root open
+  });
+
+  test('stubSearchMatches also covers ndjson-line rows', () => {
+    const root = tree([ndjsonLine(0, 0, 10), ndjsonLine(1, 11, 20)]);
+    const f = flattenTree(root);
+    expect(f.find((r) => r.id === '$[1]')?.kind).toBe('line');
+    const deep = findMatches(f, 'x', new Set(['$[1]']));
+    expect(deep.matchIndices.map((i) => f[i].id)).toEqual(['$[1]']);
+  });
+
+  test('stubSearchMatches unions with sync key/leaf matches without duplicates', () => {
+    // Tree where `$[0]` matches via the deep set AND `$[1]`'s key would
+    // sync-match a numeric needle. Both should appear exactly once.
+    const root = tree([stubObj(0, 10, 50), stubObj(1, 60, 100)]);
+    const f = flattenTree(root);
+    // Needle "1" matches the key "1" on $[1] (sync). The deep set adds
+    // $[0]. Result: 2 distinct matches.
+    const deep = findMatches(f, '1', new Set(['$[0]']));
+    const ids = deep.matchIndices.map((i) => f[i].id).sort();
+    expect(ids).toEqual(['$[0]', '$[1]']);
+  });
+
   test('match on composite open row pulls in its entire subtree', () => {
     // 0:$ open, 1:$.meta open, 2:$.meta.tags open, 3:$.meta.tags[0] leaf,
     // 4:$.meta.tags close, 5:$.meta.score leaf, 6:$.meta close, 7:$ close
@@ -109,5 +175,91 @@ describe('findMatches', () => {
     expect([...r.visibleSet].sort((a, b) => a - b)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);
+  });
+});
+
+describe('collectStubRanges', () => {
+  test('null root → empty list', () => {
+    expect(collectStubRanges(null)).toEqual([]);
+  });
+
+  test('tree with only materialized composites → empty list', () => {
+    const root: TreeNode = {
+      kind: 'object',
+      key: null,
+      path: '$',
+      children: [{ kind: 'number', key: 'a', path: '$.a', value: 1 }],
+    };
+    expect(collectStubRanges(root)).toEqual([]);
+  });
+
+  test('collects stub-object, stub-array, ndjson-line in tree order', () => {
+    const root: TreeNode = {
+      kind: 'object',
+      key: null,
+      path: '$',
+      children: [
+        {
+          kind: 'stub-object',
+          key: 'a',
+          path: '$.a',
+          byteStart: 10,
+          byteEnd: 50,
+          childCount: 0,
+          preview: [],
+        },
+        {
+          kind: 'array',
+          key: 'events',
+          path: '$.events',
+          children: [
+            {
+              kind: 'ndjson-line',
+              key: '0',
+              path: '$.events[0]',
+              byteStart: 60,
+              byteEnd: 80,
+            },
+            {
+              kind: 'stub-array',
+              key: '1',
+              path: '$.events[1]',
+              byteStart: 90,
+              byteEnd: 110,
+              childCount: 0,
+              preview: [],
+            },
+          ],
+        },
+      ],
+    };
+    const ranges = collectStubRanges(root);
+    expect(ranges).toEqual([
+      { path: '$.a', byteStart: 10, byteEnd: 50 },
+      { path: '$.events[0]', byteStart: 60, byteEnd: 80 },
+      { path: '$.events[1]', byteStart: 90, byteEnd: 110 },
+    ]);
+  });
+
+  test('does not descend into stub children (they have none materialized)', () => {
+    // The stub's own byte range covers its subtree; we don't synthesize
+    // additional ranges for what's inside it.
+    const root: TreeNode = {
+      kind: 'object',
+      key: null,
+      path: '$',
+      children: [
+        {
+          kind: 'stub-object',
+          key: 'a',
+          path: '$.a',
+          byteStart: 0,
+          byteEnd: 100,
+          childCount: 5,
+          preview: [],
+        },
+      ],
+    };
+    expect(collectStubRanges(root)).toHaveLength(1);
   });
 });

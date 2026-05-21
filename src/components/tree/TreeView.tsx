@@ -4,8 +4,12 @@ import { useDocumentStore } from '@/state/documentStore';
 import { useViewStore } from '@/state/viewStore';
 import { type ParseTreeError } from '@/lib/tree/parse';
 import { type FlatRow } from '@/lib/tree/flatten';
-import { findMatches } from '@/lib/tree/search';
-import { parseFile as parseFileStreaming } from '@/state/parserHost';
+import { collectStubRanges, findMatches } from '@/lib/tree/search';
+import {
+  parseFile as parseFileStreaming,
+  searchStubs,
+  abortSearch,
+} from '@/state/parserHost';
 import { detectNdjson } from '@/lib/json/ndjson';
 import { parseNdjson } from '@/lib/parser/parse-ndjson';
 import { useStubExpansion } from '@/state/useStubExpansion';
@@ -48,6 +52,14 @@ export function TreeView() {
   const openDrawer = useViewStore((s) => s.openDrawer);
   const setSourceBlob = useViewStore((s) => s.setSourceBlob);
   const setParseMode = useViewStore((s) => s.setParseMode);
+  const root = useViewStore((s) => s.root);
+  const sourceBlob = useViewStore((s) => s.sourceBlob);
+  const stubSearchMatches = useViewStore((s) => s.stubSearchMatches);
+  // stubSearchProgress is consumed directly inside TreeSearch — no need
+  // to subscribe at this level (would just trigger extra re-renders).
+  const addStubSearchMatches = useViewStore((s) => s.addStubSearchMatches);
+  const setStubSearchProgress = useViewStore((s) => s.setStubSearchProgress);
+  const clearStubSearch = useViewStore((s) => s.clearStubSearch);
   const expandingPaths = useViewStore((s) => s.expandingPaths);
   const setExpanding = useViewStore((s) => s.setExpanding);
   const expandStubRow = useStubExpansion();
@@ -156,13 +168,63 @@ export function TreeView() {
   }, [text, file, source, setRoot, setSourceBlob, setParseMode]);
 
   const { matchIndices, visibleSet } = useMemo(
-    () => findMatches(flat, query),
-    [flat, query],
+    () => findMatches(flat, query, stubSearchMatches),
+    [flat, query, stubSearchMatches],
   );
 
   useEffect(() => {
     setCurrentMatch(0);
   }, [query]);
+
+  // Worker-side content scan over stubs and NDJSON lines. The sync
+  // findMatches above handles keys + leaf primitives instantly; this
+  // effect fires the deep scan whose results stream back into
+  // stubSearchMatches and re-trigger findMatches via the dep above.
+  //
+  // Concurrency: when the user types fast, the previous query's worker
+  // is aborted and its in-flight batches are dropped (the next effect
+  // clears stubSearchMatches before kicking off the new search). The
+  // worker's `await Promise.resolve()` between abort-check windows
+  // gives the abortSearch() postMessage a chance to land before each
+  // batch — so a typed-too-fast loop doesn't queue up scans.
+  useEffect(() => {
+    if (query.trim() === '') {
+      clearStubSearch();
+      return;
+    }
+    if (!sourceBlob || !root) return;
+    const ranges = collectStubRanges(root);
+    if (ranges.length === 0) return;
+
+    // Reset to the new query's empty state, kick off the worker scan.
+    clearStubSearch();
+    setStubSearchProgress({ scanned: 0, total: ranges.length });
+
+    let cancelled = false;
+    searchStubs(sourceBlob, ranges, query, (batch, scanned) => {
+      if (cancelled) return;
+      addStubSearchMatches(batch.map((b) => b.path));
+      setStubSearchProgress({ scanned, total: ranges.length });
+    })
+      .then(() => {
+        if (!cancelled) setStubSearchProgress(null);
+      })
+      .catch(() => {
+        if (!cancelled) setStubSearchProgress(null);
+      });
+
+    return () => {
+      cancelled = true;
+      abortSearch();
+    };
+  }, [
+    query,
+    root,
+    sourceBlob,
+    addStubSearchMatches,
+    setStubSearchProgress,
+    clearStubSearch,
+  ]);
 
   const { visibleRows, visibleFlatIdx, idToVisibleIdx } = useVisibleRows(
     flat,
