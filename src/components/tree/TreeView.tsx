@@ -52,7 +52,14 @@ export function TreeView() {
   const openDrawer = useViewStore((s) => s.openDrawer);
   const setSourceBlob = useViewStore((s) => s.setSourceBlob);
   const setParseMode = useViewStore((s) => s.setParseMode);
-  const root = useViewStore((s) => s.root);
+  // NOTE: `root` intentionally NOT subscribed via useViewStore. Every
+  // stub expansion replaces the root reference via spliceSubtree, which
+  // would otherwise re-trigger the deep-search effect below and restart
+  // a 5–10s worker scan from scratch on every expand-click. The effect
+  // reads root once at start via getState(); the collected stub ranges
+  // capture the tree's stub layout at search-start time. Stale entries
+  // in stubSearchMatches after later expansions are harmless (matchRow
+  // gates them on row.kind being stub/line, which expansion removes).
   const sourceBlob = useViewStore((s) => s.sourceBlob);
   const stubSearchMatches = useViewStore((s) => s.stubSearchMatches);
   // stubSearchProgress is consumed directly inside TreeSearch — no need
@@ -176,6 +183,20 @@ export function TreeView() {
     setCurrentMatch(0);
   }, [query]);
 
+  // Defensive clamp: if matchIndices shrinks below currentMatch (e.g.
+  // a parse swap or future "remove stale stub-matches" code path),
+  // snap back inside range so the displayed N/M never reads as
+  // "199999 / 160003". Trigger is matchIndices.length, not the array
+  // reference, so a stable count doesn't loop the effect.
+  useEffect(() => {
+    if (
+      matchIndices.length > 0 &&
+      currentMatch >= matchIndices.length
+    ) {
+      setCurrentMatch(matchIndices.length - 1);
+    }
+  }, [matchIndices.length, currentMatch]);
+
   // Worker-side content scan over stubs and NDJSON lines. The sync
   // findMatches above handles keys + leaf primitives instantly; this
   // effect fires the deep scan whose results stream back into
@@ -192,8 +213,13 @@ export function TreeView() {
       clearStubSearch();
       return;
     }
-    if (!sourceBlob || !root) return;
-    const ranges = collectStubRanges(root);
+    if (!sourceBlob) return;
+    // Read root via getState() rather than from the closure so the
+    // effect's dep list can exclude `root` — see the comment on the
+    // selector hook above for why.
+    const rootSnapshot = useViewStore.getState().root;
+    if (!rootSnapshot) return;
+    const ranges = collectStubRanges(rootSnapshot);
     if (ranges.length === 0) return;
 
     // Reset to the new query's empty state, kick off the worker scan.
@@ -203,10 +229,25 @@ export function TreeView() {
     let cancelled = false;
     searchStubs(sourceBlob, ranges, query, (batch, scanned) => {
       if (cancelled) return;
-      addStubSearchMatches(batch.map((b) => b.path));
-      setStubSearchProgress({ scanned, total: ranges.length });
+      if (batch.length > 0) {
+        addStubSearchMatches(batch.map((b) => b.path));
+      }
+      // Clear progress directly on the terminal tick instead of waiting
+      // for the worker's Promise to resolve via `.then` below — the
+      // Comlink return message is queued behind all the onBatch
+      // postMessages, and React render time on the matches Set updates
+      // can delay .then by several seconds. The user sees the spinner
+      // "stuck at 100%" during that drain. Doing it here cuts the
+      // perceived latency to zero.
+      if (scanned >= ranges.length) {
+        setStubSearchProgress(null);
+      } else {
+        setStubSearchProgress({ scanned, total: ranges.length });
+      }
     })
       .then(() => {
+        // Backup path: covers the aborted-mid-flight case where the
+        // terminal onBatch never fired.
         if (!cancelled) setStubSearchProgress(null);
       })
       .catch(() => {
@@ -219,7 +260,6 @@ export function TreeView() {
     };
   }, [
     query,
-    root,
     sourceBlob,
     addStubSearchMatches,
     setStubSearchProgress,
