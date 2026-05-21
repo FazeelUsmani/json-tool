@@ -450,7 +450,7 @@ Binary checklist (no "mostly"):
 ### Launch
 
 - [ ] Benchmark video recorded vs jsonhero / stack.hu / jsoncrack / jsoneditoronline (JSON + NDJSON fixtures)
-- [ ] **Benchmark methodology page published** (hardware, browser, fixtures, repro)
+- [x] **Benchmark methodology page published** (hardware, browser, fixtures, repro) *(2026-05-21: see benchmarks/methodology.md — drafted from the 201MB cold-run data captured this session; needs to be wired to a public route + measurement gaps closed (500MB cold run, search wall-clock) before launch)*
 - [x] **Both A and B launch narratives drafted** (HN post + OG + video script) by Fri W3 *(see outreach/launch-narratives.md, 2026-05-21)*
 - [ ] **A11y response pre-written for HN comments**
 - [ ] **Launch channel sequence queued:** HN → Reddit → Lobsters → Twitter → newsletters
