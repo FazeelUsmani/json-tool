@@ -130,10 +130,22 @@ export function TreeView() {
               setParseError(null);
             }
           })
-          .catch(() => {
-            // Worker termination on rapid re-parse rejects the prior
-            // Promise. That's the cancel path — don't surface it as a
-            // user-visible error.
+          .catch((err: unknown) => {
+            if (cancelled) return;
+            // parserHost tags supersede-by-later-call rejections with
+            // name='AbortError'. Anything else is a genuine worker
+            // failure (OOM, postMessage clone too large, internal
+            // crash) and was previously swallowed silently — surface it
+            // now so the user sees what happened instead of an empty
+            // tree pane with no signal.
+            const isAbort =
+              err instanceof Error && err.name === 'AbortError';
+            if (isAbort) return;
+            const message =
+              err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console
+            console.error('[parser] parseFile failed:', err);
+            setParseError({ message });
           });
       }
     }, debounceMs);
@@ -243,15 +255,20 @@ export function TreeView() {
     clearExpanding: (path) => setExpanding(path, false),
   });
 
-  if (text.trim() === '') {
-    return (
-      <Hint>Type or paste JSON in the editor to see the tree here.</Hint>
-    );
-  }
-  if (flat.length === 0 && parseError) {
-    return <ParseErrorView error={parseError} />;
-  }
+  // Empty-flat states: distinguish "truly nothing loaded" from
+  // "loading / paused / errored" so viewer-only file drops (text='' +
+  // file=set + populated flat) render the tree instead of the
+  // first-time hint. Order matters: parse error wins over hint;
+  // hint requires BOTH no text AND no file (viewer-only sets text=''
+  // intentionally — that's not the empty state).
   if (flat.length === 0) {
+    if (parseError) return <ParseErrorView error={parseError} />;
+    if (text.trim() === '' && !file) {
+      return (
+        <Hint>Type or paste JSON in the editor to see the tree here.</Hint>
+      );
+    }
+    // Transient: parse in flight or stale empty-tree state.
     return null;
   }
   return (
