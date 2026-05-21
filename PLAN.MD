@@ -417,10 +417,10 @@ Binary checklist (no "mostly"):
 - [x] **Day-1 spike (2026-05-14):** parser = `@streamparser/json`. Production offset capture uses `Tokenizer.onToken`.
 - [ ] Public URL live (CF Pages or custom domain)
 - [ ] Name picked, **domain + GitHub org + npm scope + Twitter handle registered** (by Fri W2)
-- [ ] Paste 1MB JSON → format → tree expands smoothly
-- [ ] 200MB JSON loads, renders spine, can navigate top 3 levels
-- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works
-- [ ] **200MB NDJSON loads, paginates by line, expand-line works**
+- [x] Paste 1MB JSON → format → tree expands smoothly *(streaming worker handles paste path; Format/Minify/Sort buttons still synchronous on text)*
+- [x] **200MB JSON loads, renders spine, can navigate top 3 levels** *(2026-05-21: telemetry-900000.json 201MB → parseMs 5645–5800ms ≈ 34.7 MB/s, tab survives via viewer-only mode, tree populates with line/stub rows, expand-in-place works)*
+- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works *(parser is architecture-ready; untested at 500MB; no progress bar yet — depends on search slow path scope, task #73)*
+- [ ] **200MB NDJSON loads, paginates by line, expand-line works** *(detection + line-offset index + LineRow lazy preview + drawer expansion shipped 2026-05-21 a07266f / 4f19364; in-place caret/Enter expansion shipped 8cd02d7; only validated on the 22KB and 43KB ndjson corpus fixtures — 200MB NDJSON fixture not yet generated/tested)*
 - [ ] Schema inference exports JSON Schema, TS, Zod from a 1MB JSON
 - [ ] `jsonrepair` fixes a deliberately-broken LLM JSON sample
 - [ ] **Table view renders top-level array as sortable table**
@@ -436,10 +436,10 @@ Binary checklist (no "mostly"):
 
 ### Privacy & safety
 
-- [ ] `?url=` handler enforces **500MB cap (matching hero)**, content-type allowlist, 3-redirect max, 30s abort
+- [ ] `?url=` handler enforces **500MB cap (matching hero)**, content-type allowlist, 3-redirect max, 30s abort *(fetchUrl.ts has allowlist + 30s abort + Content-Length cap, but cap is currently 100MB not 500MB — needs bump to match hero claim)*
 - [ ] **Share modal shows explicit consent before upload**
 - [ ] **CSP badge dims when share link active**
-- [ ] **PWA installable; offline mode works for files already loaded**
+- [x] **PWA installable; offline mode works for files already loaded** *(W2 shipped f7ed582: skipWaiting + clientsClaim + manifest)*
 
 ### Conversion
 
@@ -451,7 +451,7 @@ Binary checklist (no "mostly"):
 
 - [ ] Benchmark video recorded vs jsonhero / stack.hu / jsoncrack / jsoneditoronline (JSON + NDJSON fixtures)
 - [ ] **Benchmark methodology page published** (hardware, browser, fixtures, repro)
-- [ ] **Both A and B launch narratives drafted** (HN post + OG + video script) by Fri W3
+- [x] **Both A and B launch narratives drafted** (HN post + OG + video script) by Fri W3 *(see outreach/launch-narratives.md, 2026-05-21)*
 - [ ] **A11y response pre-written for HN comments**
 - [ ] **Launch channel sequence queued:** HN → Reddit → Lobsters → Twitter → newsletters
 - [ ] 5 strangers gave recorded feedback; ≥3 found a real bug/UX issue
@@ -465,7 +465,7 @@ Binary checklist (no "mostly"):
 ### Quality
 
 - [ ] Lighthouse 90+ on `/`, `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`
-- [ ] CI green: `tsc && eslint && vitest && playwright smoke`
+- [ ] CI green: `tsc && eslint && vitest && playwright smoke` *(local 2026-05-21: tsc -b clean, 158/158 vitest, prod build clean; no CI runner configured yet)*
 - [ ] Repo flipped public on launch day
 
 **Verification commands:**
