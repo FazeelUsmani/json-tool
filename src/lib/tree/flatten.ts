@@ -15,6 +15,7 @@ import type { TreeNode } from './parse';
 
 type CompositeNode = Extract<TreeNode, { kind: 'object' | 'array' }>;
 type StubNode = Extract<TreeNode, { kind: 'stub-object' | 'stub-array' }>;
+type NdjsonLineNode = Extract<TreeNode, { kind: 'ndjson-line' }>;
 
 export type ParentKind = 'object' | 'array' | 'root';
 
@@ -38,9 +39,9 @@ export type FlatRow =
       kind: 'leaf';
       id: string;
       depth: number;
-      // Stubs route to the 'stub' row type below, never to leaf — narrow
-      // the type so downstream switches don't have to re-check for stubs.
-      node: Exclude<TreeNode, StubNode>;
+      // Stubs route to the 'stub' row type below, ndjson-lines to 'line';
+      // narrow the leaf node type so downstream switches don't re-check.
+      node: Exclude<TreeNode, StubNode | NdjsonLineNode>;
       parentKind: ParentKind;
       parentIndex: number;
     }
@@ -54,6 +55,18 @@ export type FlatRow =
       id: string;
       depth: number;
       node: StubNode;
+      parentKind: ParentKind;
+      parentIndex: number;
+    }
+  // W3-Thu NDJSON: one row per line. Leaf-shaped (no children); preview
+  // text loads lazily from sourceBlob in LineRow. Click opens detail
+  // drawer with the line's parsed JSON (v1). In-place expansion is the
+  // v2 follow-up.
+  | {
+      kind: 'line';
+      id: string;
+      depth: number;
+      node: NdjsonLineNode;
       parentKind: ParentKind;
       parentIndex: number;
     };
@@ -74,6 +87,17 @@ function walk(
   if (node.kind === 'stub-object' || node.kind === 'stub-array') {
     out.push({
       kind: 'stub',
+      id: node.path,
+      depth,
+      node,
+      parentKind,
+      parentIndex,
+    });
+    return;
+  }
+  if (node.kind === 'ndjson-line') {
+    out.push({
+      kind: 'line',
       id: node.path,
       depth,
       node,

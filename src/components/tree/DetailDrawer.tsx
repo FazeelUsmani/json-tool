@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -83,6 +84,8 @@ function Body({ row }: { row: FlatRow }) {
       )}
 
       {row.kind === 'stub' && <StubBody row={row} />}
+
+      {row.kind === 'line' && <LineBody row={row} />}
     </div>
   );
 }
@@ -165,6 +168,69 @@ function StubBody({ row }: { row: Extract<FlatRow, { kind: 'stub' }> }) {
   );
 }
 
+function LineBody({ row }: { row: Extract<FlatRow, { kind: 'line' }> }) {
+  const sourceBlob = useViewStore((s) => s.sourceBlob);
+  const node = row.node;
+  const [raw, setRaw] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sourceBlob) {
+      setRaw(null);
+      return;
+    }
+    let cancelled = false;
+    sourceBlob
+      .slice(node.byteStart, node.byteEnd)
+      .text()
+      .then((text) => {
+        if (!cancelled) setRaw(text);
+      })
+      .catch(() => {
+        if (!cancelled) setRaw(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceBlob, node.byteStart, node.byteEnd]);
+
+  if (raw === null) {
+    return (
+      <Section label="Content">
+        <div className="text-muted-foreground flex items-center gap-2 text-xs">
+          <Loader2 className="size-3 animate-spin" />
+          Loading line…
+        </div>
+      </Section>
+    );
+  }
+
+  // Try JSON.parse for a pretty-printed view; fall back to the raw line
+  // if parsing fails (malformed NDJSON record, partial bytes, etc.).
+  let pretty: string;
+  try {
+    pretty = JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    pretty = raw.trim();
+  }
+  return (
+    <>
+      <Section label="Bytes">
+        <span className="text-muted-foreground text-xs">
+          {node.byteEnd - node.byteStart} B
+        </span>
+      </Section>
+      <Section label="Content">
+        <div className="flex items-start gap-2">
+          <pre className="bg-muted/60 max-h-72 flex-1 overflow-auto rounded p-2 font-mono text-xs">
+            {pretty}
+          </pre>
+          <CopyAction text={pretty} label="line" />
+        </div>
+      </Section>
+    </>
+  );
+}
+
 function CompositeBody({ node }: { node: TreeNode }) {
   if (node.kind !== 'object' && node.kind !== 'array') return null;
   const childCount = node.children.length;
@@ -218,5 +284,6 @@ function isPrimitive(node: TreeNode): boolean {
 function nodeTypeLabel(node: TreeNode): string {
   if (node.kind === 'object' || node.kind === 'stub-object') return 'object';
   if (node.kind === 'array' || node.kind === 'stub-array') return 'array';
+  if (node.kind === 'ndjson-line') return 'ndjson line';
   return node.kind;
 }

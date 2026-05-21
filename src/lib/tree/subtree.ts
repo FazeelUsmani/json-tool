@@ -24,5 +24,15 @@ export function reconstructJson(node: TreeNode): unknown {
       }
       return obj;
     }
+    case 'stub-object':
+    case 'stub-array':
+    case 'ndjson-line':
+      // Reconstruction requires materialized children, which these kinds
+      // don't have synchronously available. Callers that need the value
+      // for these kinds load the byte range from sourceBlob and parse it
+      // separately (DetailDrawer's NDJSON-line path; expandStub flow for
+      // composite stubs). Returning undefined here is a sentinel: the
+      // drawer falls back to the "raw bytes" view in those cases.
+      return undefined;
   }
 }

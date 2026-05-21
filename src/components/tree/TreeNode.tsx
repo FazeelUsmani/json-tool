@@ -40,6 +40,7 @@ export const TreeNode = memo(function TreeNode({
   if (row.kind === 'open') return <OpenRow row={row} flatIdx={flatIdx} />;
   if (row.kind === 'close') return <CloseRow row={row} flatIdx={flatIdx} />;
   if (row.kind === 'stub') return <StubRow row={row} flatIdx={flatIdx} />;
+  if (row.kind === 'line') return <LineRow row={row} flatIdx={flatIdx} />;
   return <LeafRow row={row} flatIdx={flatIdx} />;
 });
 
@@ -365,6 +366,98 @@ function StubBody({
       )}
       <span> {closeCh}</span>
     </>
+  );
+}
+
+// Cap on the inline NDJSON line preview slice (bytes). Lines can be
+// arbitrarily long (multi-MB single-line JSON values exist); slicing the
+// full line per visible row at scroll would block the UI. CSS truncate
+// handles visual cut-off on top of the byte cap. Same rationale as
+// STUB_PREVIEW_MAX_BYTES but applied to a single line range, not a
+// 3-element span — bumped to 512 to give a useful one-line preview.
+const NDJSON_LINE_PREVIEW_MAX_BYTES = 512;
+
+function LineRow({
+  row,
+  flatIdx,
+}: {
+  row: Extract<FlatRow, { kind: 'line' }>;
+  flatIdx: number;
+}) {
+  const { query, openDrawer, setFocusedIndex } = useViewStore(
+    useShallow((s) => ({
+      query: s.query,
+      openDrawer: s.openDrawer,
+      setFocusedIndex: s.setFocusedIndex,
+    })),
+  );
+  const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const sourceBlob = useViewStore((s) => s.sourceBlob);
+  const node = row.node;
+
+  // Same module-level WeakMap caches as StubRow — different node kind
+  // but the path-keyed text-cache abstraction is identical, no reason
+  // to duplicate.
+  const [previewText, setPreviewText] = useState<string | null>(() =>
+    sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
+  );
+  const [prevRowId, setPrevRowId] = useState(row.id);
+  if (prevRowId !== row.id) {
+    setPrevRowId(row.id);
+    setPreviewText(
+      sourceBlob ? getCachedStubPreview(sourceBlob, row.id) ?? null : null,
+    );
+  }
+
+  useEffect(() => {
+    if (!sourceBlob) {
+      setPreviewText(null);
+      return;
+    }
+    const cached = getCachedStubPreview(sourceBlob, row.id);
+    if (cached !== undefined) {
+      setPreviewText(cached);
+      return;
+    }
+    const span = node.byteEnd - node.byteStart;
+    const sliceEnd =
+      span > NDJSON_LINE_PREVIEW_MAX_BYTES
+        ? node.byteStart + NDJSON_LINE_PREVIEW_MAX_BYTES
+        : node.byteEnd;
+    let loader = getStubPreviewLoader(sourceBlob, row.id);
+    if (loader === undefined) {
+      loader = sourceBlob.slice(node.byteStart, sliceEnd).text();
+      setStubPreviewLoader(sourceBlob, row.id, loader);
+    }
+    let cancelled = false;
+    loader
+      .then((text) => {
+        setCachedStubPreview(sourceBlob, row.id, text);
+        clearStubPreviewLoader(sourceBlob, row.id);
+        if (!cancelled) setPreviewText(text);
+      })
+      .catch(() => {
+        clearStubPreviewLoader(sourceBlob, row.id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceBlob, node.byteStart, node.byteEnd, row.id]);
+
+  return (
+    <Row
+      pad={pad(row.depth)}
+      path={row.id}
+      isFocused={isFocused}
+      onFocus={() => setFocusedIndex(flatIdx)}
+      onShowDetail={() => openDrawer(row)}
+    >
+      <CaretSpacer />
+      <KeyLabel name={node.key} parentKind={row.parentKind} query={query} />
+      <span className="text-muted-foreground truncate">
+        {previewText ?? '…'}
+      </span>
+    </Row>
   );
 }
 

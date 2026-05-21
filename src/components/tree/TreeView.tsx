@@ -6,6 +6,8 @@ import { type ParseTreeError } from '@/lib/tree/parse';
 import { type FlatRow } from '@/lib/tree/flatten';
 import { findMatches } from '@/lib/tree/search';
 import { parseFile as parseFileStreaming } from '@/state/parserHost';
+import { detectNdjson } from '@/lib/json/ndjson';
+import { parseNdjson } from '@/lib/parser/parse-ndjson';
 import { useStubExpansion } from '@/state/useStubExpansion';
 import { TreeNode } from './TreeNode';
 import { TreeSearch } from './TreeSearch';
@@ -45,6 +47,7 @@ export function TreeView() {
   const toggle = useViewStore((s) => s.toggle);
   const openDrawer = useViewStore((s) => s.openDrawer);
   const setSourceBlob = useViewStore((s) => s.setSourceBlob);
+  const setParseMode = useViewStore((s) => s.setParseMode);
   const expandingPaths = useViewStore((s) => s.expandingPaths);
   const setExpanding = useViewStore((s) => s.setExpanding);
   const expandStubRow = useStubExpansion();
@@ -84,31 +87,61 @@ export function TreeView() {
       // ranges later. Stored BEFORE the parse Promise resolves so a
       // stub click that races the parse can still see a source.
       setSourceBlob(parseSource);
-      parseFileStreaming(parseSource)
-        .then((result) => {
-          if (cancelled) return;
-          setRoot(result.root);
-          if (result.parseError) {
-            setParseError({
-              message: result.parseError.message,
-              line: result.parseError.line,
-              col: result.parseError.col,
+
+      // Detect NDJSON before dispatching — read the head, decide path,
+      // then route through the right parser. Detection sample is 4KB
+      // so the slice/decode is cheap even on huge files.
+      const head = parseSource.slice(0, 4 * 1024);
+      head
+        .bytes
+        ? head.bytes().then((b) => detectAndParse(parseSource, b))
+        : head
+            .arrayBuffer()
+            .then((ab) => detectAndParse(parseSource, new Uint8Array(ab)));
+
+      function detectAndParse(blob: Blob, headBytes: Uint8Array) {
+        if (cancelled) return;
+        const isNdjson = detectNdjson(headBytes);
+        setParseMode(isNdjson ? 'ndjson' : 'json');
+        if (isNdjson) {
+          parseNdjson(blob)
+            .then((result) => {
+              if (cancelled) return;
+              setRoot(result.root);
+              setParseError(null);
+            })
+            .catch((err: Error) => {
+              if (cancelled) return;
+              setParseError({ message: err.message });
             });
-          } else {
-            setParseError(null);
-          }
-        })
-        .catch(() => {
-          // Worker termination on rapid re-parse rejects the prior
-          // Promise. That's the cancel path — don't surface it as a
-          // user-visible error.
-        });
+          return;
+        }
+        parseFileStreaming(blob)
+          .then((result) => {
+            if (cancelled) return;
+            setRoot(result.root);
+            if (result.parseError) {
+              setParseError({
+                message: result.parseError.message,
+                line: result.parseError.line,
+                col: result.parseError.col,
+              });
+            } else {
+              setParseError(null);
+            }
+          })
+          .catch(() => {
+            // Worker termination on rapid re-parse rejects the prior
+            // Promise. That's the cancel path — don't surface it as a
+            // user-visible error.
+          });
+      }
     }, debounceMs);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [text, file, source, setRoot, setSourceBlob]);
+  }, [text, file, source, setRoot, setSourceBlob, setParseMode]);
 
   const { matchIndices, visibleSet } = useMemo(
     () => findMatches(flat, query),

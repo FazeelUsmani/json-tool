@@ -40,6 +40,18 @@ export type TreeNode =
       byteEnd: number;
       childCount: number;
       preview: { byteStart: number; byteEnd: number }[];
+    }
+  // W3-Thu: one NDJSON line. Leaf-like (no children); the byte range
+  // points at the line's content in the original blob. Preview text
+  // loads lazily via the same sourceBlob slice path StubRow uses.
+  // Click → detail drawer JSON.parse's the line bytes and renders
+  // (v1). In-place subtree expansion lands in [[ndjson-v2]].
+  | {
+      kind: 'ndjson-line';
+      key: string | null;
+      path: string;
+      byteStart: number;
+      byteEnd: number;
     };
 
 export type ParseTreeResult =

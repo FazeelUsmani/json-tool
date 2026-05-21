@@ -63,6 +63,10 @@ type ViewState = {
   // re-slices this on stub click. Null when nothing parsed yet OR when
   // running via the sync (?streaming=0) path.
   sourceBlob: Blob | null;
+  // Determined at parse time from NDJSON detection; not user-settable.
+  // Drives parser dispatch (JSON streaming spine vs NDJSON line index)
+  // and the LineRow/StubRow render branch via the FlatRow shape.
+  parseMode: 'json' | 'ndjson';
 };
 
 type ViewActions = {
@@ -74,6 +78,7 @@ type ViewActions = {
   closeDrawer: () => void;
   setExpanding: (path: string, value: boolean) => void;
   setSourceBlob: (blob: Blob | null) => void;
+  setParseMode: (mode: 'json' | 'ndjson') => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
@@ -86,6 +91,7 @@ export const useViewStore = create<ViewState & ViewActions>()(
     drawerFor: null,
     expandingPaths: new Set<string>(),
     sourceBlob: null,
+    parseMode: 'json' as const,
     setRoot: (root) =>
       set((state) => {
         const newFlat = root === null ? [] : flattenTree(root);
@@ -142,6 +148,10 @@ export const useViewStore = create<ViewState & ViewActions>()(
     setSourceBlob: (blob) =>
       set((state) => {
         state.sourceBlob = blob;
+      }),
+    setParseMode: (mode) =>
+      set((state) => {
+        state.parseMode = mode;
       }),
   })),
 );

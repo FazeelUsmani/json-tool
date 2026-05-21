@@ -48,5 +48,12 @@ export function previewChildValue(node: TreeNode): string {
     case 'array':
     case 'stub-array':
       return '[…]';
+    case 'ndjson-line':
+      // Lines don't have a synchronously-available value (their content
+      // lives in the source blob, decoded lazily). Render the same
+      // ellipsis as a generic-content placeholder — used inside an
+      // outer array preview, never standalone (LineRow renders the
+      // actual line content).
+      return '…';
   }
 }
