@@ -2,18 +2,23 @@ import { describe, expect, test } from 'vitest';
 import { previewChildValue, previewFromChildren } from './preview';
 import type { TreeNode } from './parse';
 
+// Composite helpers return the narrowed variant so the calls into
+// previewFromChildren type-check without a cast at every call site.
+type ObjectNode = Extract<TreeNode, { kind: 'object' }>;
+type ArrayNode = Extract<TreeNode, { kind: 'array' }>;
+
 function obj(
   key: string | null,
   path: string,
   children: TreeNode[],
-): TreeNode {
+): ObjectNode {
   return { kind: 'object', key, path, children };
 }
 function arr(
   key: string | null,
   path: string,
   children: TreeNode[],
-): TreeNode {
+): ArrayNode {
   return { kind: 'array', key, path, children };
 }
 function num(key: string | null, path: string, value: number): TreeNode {
