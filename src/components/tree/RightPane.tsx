@@ -20,9 +20,10 @@
 // not visually shown. Cheaper than the unmount/remount churn at
 // 2.25M-row scale.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TreeView } from './TreeView';
 import { SchemaPane } from '@/components/schema/SchemaPane';
+import { TablePane } from '@/components/table/TablePane';
 import {
   Tabs,
   TabsContent,
@@ -31,6 +32,7 @@ import {
 } from '@/components/ui/tabs';
 import { useViewStore } from '@/state/viewStore';
 import { inferSchemaForRoot } from '@/state/schemaHost';
+import { findPrimaryArray } from '@/lib/table/primaryArray';
 import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
 import type { TreeNode } from '@/lib/tree/parse';
 
@@ -38,7 +40,9 @@ export function RightPane() {
   const root = useViewStore((s) => s.root);
   const sourceBlob = useViewStore((s) => s.sourceBlob);
 
-  const [activeTab, setActiveTab] = useState<'tree' | 'schema'>('tree');
+  const [activeTab, setActiveTab] = useState<'tree' | 'schema' | 'table'>(
+    'tree',
+  );
   const [result, setResult] = useState<SchemaTripleResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +54,12 @@ export function RightPane() {
   // user can click Refresh or ignore.
   const stale = result !== null && rootAtInfer !== root;
   const schemaDisabled = root === null;
+  // Table tab activates when there's a "primary array" — either the
+  // root itself is an array, OR the root is an object whose largest
+  // direct-child value is an array (the canonical wrapped-array
+  // shape like `{"events": [...]}`). Otherwise disabled.
+  const primaryArray = useMemo(() => findPrimaryArray(root), [root]);
+  const tableDisabled = primaryArray === null;
 
   async function runInfer() {
     if (root === null || sourceBlob === null) {
@@ -90,7 +100,9 @@ export function RightPane() {
   return (
     <Tabs
       value={activeTab}
-      onValueChange={(v) => setActiveTab(v as 'tree' | 'schema')}
+      onValueChange={(v) =>
+        setActiveTab(v as 'tree' | 'schema' | 'table')
+      }
       className="flex h-full min-h-0 flex-col gap-0"
     >
       <div className="border-b px-3 pt-1.5">
@@ -104,6 +116,18 @@ export function RightPane() {
             disabled={schemaDisabled}
           >
             Schema
+          </TabsTrigger>
+          <TabsTrigger
+            value="table"
+            className="text-xs"
+            disabled={tableDisabled}
+            title={
+              tableDisabled
+                ? 'Table view requires a top-level array'
+                : undefined
+            }
+          >
+            Table
           </TabsTrigger>
         </TabsList>
       </div>
@@ -126,6 +150,22 @@ export function RightPane() {
           stale={stale}
           onRefresh={runInfer}
         />
+      </TabsContent>
+      <TabsContent
+        value="table"
+        // Table doesn't get forceMount — it's a heavier component
+        // (column-derivation effect + per-row blob.slice on stub
+        // arrays), and the user explicitly opts in by clicking the
+        // tab. Mount on demand, unmount on exit.
+        className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden"
+      >
+        {primaryArray && (
+          <TablePane
+            rows={primaryArray.node.children}
+            path={primaryArray.path}
+            sourceBlob={sourceBlob}
+          />
+        )}
       </TabsContent>
     </Tabs>
   );
