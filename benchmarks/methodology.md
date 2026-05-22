@@ -108,6 +108,8 @@ All three emit formats browser-verified end-to-end:
   - Empty-string key emitted as `""?: T` / `"": z.X()` — non-identifier branch quotes correctly.
 - Strict-thresholding rule visible in the output: every field on the pathological fixture is `optional` because pathological records have fields absent in some samples (matches the footer chip's "Required = present in all samples · Nullable = null in any sample" disclosure).
 
+**Known cost: TreeNode structured-clone across the schema-worker boundary.** The original commit-message claim that "Blob handle passes through Comlink trivially" is correct for the Blob argument but doesn't address the `root: TreeNode` argument — that IS structured-cloned. Extrapolating from the 2026-05-22 Pivot 2 `setFlat` checkpoint (370 ms at 38 MB, 2,530 ms at 200 MB, ~6.3 s extrapolated at 505 MB), every Schema-tab Refresh click pays this cost on the main thread. M1 acceptable since Refresh is explicit and infrequent; M2 fix routes inference through the parser worker (which already holds the parsed tree, eliminating the clone). Tracked as a follow-up slice.
+
 ### Interaction-to-Next-Paint at scale — identified and fixed
 
 **Pre-fix observation.** During the 505 MB session with a search active, Chrome Performance Insights recorded **INP 2,000 ms** on search-input keystrokes (worst case; subsequent keystrokes 1,160–1,656 ms). The search worker scan runs off-thread per the W3-Thu slow-path design, but the synchronous `findMatches` walk over 2.25 M FlatRows + React reconciliation on each keystroke was main-thread. Same problem at 200 MB extrapolated to ~800 ms.

@@ -22,29 +22,42 @@
 
 import type { TreeNode } from '@/lib/tree/parse';
 
-type ArrayNode = Extract<TreeNode, { kind: 'array' }>;
+// "Array-like" = either a materialized array (children present) OR a
+// stub-array (children not yet materialized, byteRange + childCount on
+// the node itself). Streaming parses past MAX_SPINE_DEPTH emit
+// stub-array for composites that haven't been expanded — those still
+// represent meaningful arrays the table should be able to surface.
+type ArrayLikeNode = Extract<TreeNode, { kind: 'array' | 'stub-array' }>;
 
 export type PrimaryArrayResult = {
-  node: ArrayNode;
+  node: ArrayLikeNode;
   // JSONPath-style locator: "$" for root, "$.<key>" for a child of a
   // root object. Surfaced in the table UI so users see which array
   // they're looking at when the root is wrapped.
   path: string;
 };
 
+function isArrayLike(node: TreeNode): node is ArrayLikeNode {
+  return node.kind === 'array' || node.kind === 'stub-array';
+}
+
+function arrayLikeCount(node: ArrayLikeNode): number {
+  return node.kind === 'array' ? node.children.length : node.childCount;
+}
+
 export function findPrimaryArray(
   root: TreeNode | null,
 ): PrimaryArrayResult | null {
   if (root === null) return null;
-  if (root.kind === 'array') {
+  if (isArrayLike(root)) {
     return { node: root, path: '$' };
   }
   if (root.kind !== 'object') return null;
 
-  let best: { node: ArrayNode; key: string; count: number } | null = null;
+  let best: { node: ArrayLikeNode; key: string; count: number } | null = null;
   for (const child of root.children) {
-    if (child.kind !== 'array' || child.key === null) continue;
-    const count = child.children.length;
+    if (!isArrayLike(child) || child.key === null) continue;
+    const count = arrayLikeCount(child);
     if (best === null || count > best.count) {
       best = { node: child, key: child.key, count };
     }

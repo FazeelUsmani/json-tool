@@ -154,7 +154,13 @@ export function TreeView() {
               setParseError({ message: err.message });
             })
             .finally(() => {
-              setParseInFlight(false);
+              // Mirrors parserHost.parseFile's supersede guard: only
+              // flip the HUD flag if THIS parse is still the active
+              // one. Without the cancelled check, a superseded NDJSON
+              // parse resolving after its replacement started would
+              // incorrectly clear inFlight while the replacement is
+              // still in flight — HUD briefly reports idle.
+              if (!cancelled) setParseInFlight(false);
             });
           return;
         }

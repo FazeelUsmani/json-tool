@@ -58,20 +58,39 @@ type Props = {
   // a small chip in the table header so users see which array is
   // being tabled when the root is wrapped.
   path: string;
+  // True when the primary array is a stub-array (depth ≥ MAX_SPINE_DEPTH
+  // composite that hasn't been expanded). `rows` is empty in that case
+  // — not because the data is empty, but because nothing's been
+  // materialized yet. Different empty-state copy follows.
+  stubBacked?: boolean;
   sourceBlob: Blob | null;
 };
 
-export function TablePane({ rows, path, sourceBlob }: Props) {
-  return <TableBody rows={rows} path={path} sourceBlob={sourceBlob} />;
+export function TablePane({
+  rows,
+  path,
+  stubBacked = false,
+  sourceBlob,
+}: Props) {
+  return (
+    <TableBody
+      rows={rows}
+      path={path}
+      stubBacked={stubBacked}
+      sourceBlob={sourceBlob}
+    />
+  );
 }
 
 function TableBody({
   rows,
   path,
+  stubBacked,
   sourceBlob,
 }: {
   rows: TreeNode[];
   path: string;
+  stubBacked: boolean;
   sourceBlob: Blob | null;
 }) {
   const [columns, setColumns] = useState<Column[] | null>(null);
@@ -187,6 +206,15 @@ function TableBody({
     );
   }
   if (columns.length === 0 || rows.length === 0) {
+    if (stubBacked) {
+      return (
+        <div className="text-muted-foreground flex h-full items-center justify-center p-6 text-center text-sm">
+          This array is collapsed (large composite, not yet expanded).
+          Open the Tree tab, click the array to expand it, then return
+          here to see the table.
+        </div>
+      );
+    }
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
         No rows.

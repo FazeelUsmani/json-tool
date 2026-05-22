@@ -10,6 +10,16 @@
 // — calls `.slice(start, end).text()` then `JSON.parse` to resolve
 // stub-object / stub-array / ndjson-line nodes during the walk.
 //
+// Known structured-clone cost on `root`: the TreeNode tree passed as
+// the first argument IS structured-cloned across the worker boundary.
+// At 2.25M children that's the same magnitude of clone cost we
+// measured in 2026-05-22's Pivot 2 setFlat checkpoint (~2.5s at 200MB
+// JSON, ~6s extrapolated at 505MB). For schema inference, the cost
+// fires on every Schema-tab Refresh click. M1 acceptable trade since
+// it's user-initiated and infrequent; M2 fix routes through the
+// parser worker (which already holds the parsed tree) so the clone
+// never happens.
+//
 // All three emitters run on every inference: per-format emit cost
 // is ~1ms each on a typical schema, so emitting upfront keeps
 // sub-tab switching instant in the UI (no second worker round-trip

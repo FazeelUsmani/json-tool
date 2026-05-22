@@ -79,6 +79,58 @@ describe('findPrimaryArray', () => {
     expect(findPrimaryArray(root)).toEqual({ node: a, path: '$.a' });
   });
 
+  test('root is stub-array → returned as primary with path "$"', () => {
+    // The streaming parser emits stub-array for composites past
+    // MAX_SPINE_DEPTH. findPrimaryArray must surface these or table
+    // view silently disables on the very large-file case the table
+    // was built for.
+    const stub: TreeNode = {
+      kind: 'stub-array',
+      key: null,
+      path: '$',
+      byteStart: 0,
+      byteEnd: 1000,
+      childCount: 250_000,
+      preview: [],
+    };
+    expect(findPrimaryArray(stub)).toEqual({ node: stub, path: '$' });
+  });
+
+  test('object child of root is stub-array → returned with $.key path', () => {
+    const stub: TreeNode = {
+      kind: 'stub-array',
+      key: 'events',
+      path: '$.events',
+      byteStart: 100,
+      byteEnd: 50_000_000,
+      childCount: 900_000,
+      preview: [],
+    };
+    const root = obj(null, '$', [stub]);
+    expect(findPrimaryArray(root)).toEqual({ node: stub, path: '$.events' });
+  });
+
+  test('size comparison uses childCount for stub-array, children.length for array', () => {
+    // Materialized small array (10 items) vs stub-array claiming 100k.
+    // Stub-array should win because its childCount is the truthful
+    // "how big is this array" answer.
+    const smallArr = arr('small', '$.small', [
+      num('0', '$.small[0]'),
+      num('1', '$.small[1]'),
+    ]);
+    const bigStub: TreeNode = {
+      kind: 'stub-array',
+      key: 'big',
+      path: '$.big',
+      byteStart: 0,
+      byteEnd: 1000,
+      childCount: 100_000,
+      preview: [],
+    };
+    const root = obj(null, '$', [smallArr, bigStub]);
+    expect(findPrimaryArray(root)?.path).toBe('$.big');
+  });
+
   test('mixed children: array + object + primitive → array wins', () => {
     const events = arr(
       'events',

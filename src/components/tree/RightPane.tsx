@@ -161,8 +161,16 @@ export function RightPane() {
       >
         {primaryArray && (
           <TablePane
-            rows={primaryArray.node.children}
+            rows={
+              primaryArray.node.kind === 'array'
+                ? primaryArray.node.children
+                : []
+            }
             path={primaryArray.path}
+            // True when the primary array is a stub-array — children
+            // aren't materialized yet, so TablePane shows a specific
+            // "expand first" empty state instead of misleading "no rows".
+            stubBacked={primaryArray.node.kind === 'stub-array'}
             sourceBlob={sourceBlob}
           />
         )}
