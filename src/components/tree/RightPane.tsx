@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/tabs';
 import { useViewStore } from '@/state/viewStore';
 import { inferSchemaForRoot } from '@/state/schemaHost';
-import type { JsonSchemaEmitResult } from '@/lib/schema/emit-json-schema';
+import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
 import type { TreeNode } from '@/lib/tree/parse';
 
 export function RightPane() {
@@ -39,7 +39,7 @@ export function RightPane() {
   const sourceBlob = useViewStore((s) => s.sourceBlob);
 
   const [activeTab, setActiveTab] = useState<'tree' | 'schema'>('tree');
-  const [result, setResult] = useState<JsonSchemaEmitResult | null>(null);
+  const [result, setResult] = useState<SchemaTripleResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rootAtInfer, setRootAtInfer] = useState<TreeNode | null>(null);

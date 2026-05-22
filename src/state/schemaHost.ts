@@ -17,8 +17,10 @@
 //   - beforeunload: terminate so File handles release promptly.
 
 import * as Comlink from 'comlink';
-import type { SchemaWorkerAPI } from '@/lib/parser/schema.worker';
-import type { JsonSchemaEmitResult } from '@/lib/schema/emit-json-schema';
+import type {
+  SchemaTripleResult,
+  SchemaWorkerAPI,
+} from '@/lib/parser/schema.worker';
 import type { TreeNode } from '@/lib/tree/parse';
 
 let workerInstance: Worker | null = null;
@@ -50,7 +52,7 @@ function terminateWorker() {
 export async function inferSchemaForRoot(
   root: TreeNode,
   sourceBlob: Blob,
-): Promise<JsonSchemaEmitResult> {
+): Promise<SchemaTripleResult> {
   const myId = ++activeSchemaInferId;
   terminateWorker();
   const remote = ensureWorker();

@@ -1,38 +1,39 @@
 // Schema tab content. Controlled component: parent (`RightPane.tsx`)
 // owns the schema-inference state (result, loading, error, stale) and
-// passes the Refresh action down. Local state is limited to the
-// transient "Copied" confirmation on the clipboard button.
+// passes the Refresh action down. Local state: sub-tab selection
+// (JSON Schema / TypeScript / Zod) + transient "Copied" confirmation
+// on the clipboard button.
 //
-// Sub-tabs (JSON Schema / TypeScript / Zod) display the format
-// switcher up front; only JSON Schema is enabled at slice 4. The
-// other two are visible-but-disabled to telegraph the roadmap
-// without committing to the API surface — they enable when slice 5
-// lands the additional emitters.
+// All three emit results arrive in a single SchemaTripleResult from
+// the worker, so sub-tab switching is instant — no second worker
+// round-trip when the user toggles between formats. The body
+// switches on `subTab` to pick `result.jsonSchema.source` /
+// `result.typescript.source` / `result.zod.source`.
 //
 // The honest-loading-state requirement (~500ms gap is "is anything
 // happening?" territory): Loader2 spinner with "Inferring schema…"
 // text shows immediately on first activation, well before the worker
-// round-trip completes. Error state shows the message inline; if the
-// worker throws an unexpected exception during inference, the parent
-// catches it and routes the message here.
+// round-trip completes. Error state shows the message inline.
 //
-// Footer chip surfaces the strict-thresholding rule so users seeing
-// `foo: string (required)` know one anomalous record would have
-// flipped it to optional — prevents surprised bug reports.
+// Footer chip surfaces both strict-thresholding rules so users
+// seeing `foo: string | null (required + nullable)` know one
+// anomalous record per rule would have flipped each bit.
 
 import { AlertCircle, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { JsonSchemaEmitResult } from '@/lib/schema/emit-json-schema';
+import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
 
 type Props = {
-  result: JsonSchemaEmitResult | null;
+  result: SchemaTripleResult | null;
   loading: boolean;
   error: string | null;
   stale: boolean;
   onRefresh: () => void;
 };
+
+type SubTab = 'json-schema' | 'typescript' | 'zod';
 
 export function SchemaPane({
   result,
@@ -41,12 +42,22 @@ export function SchemaPane({
   stale,
   onRefresh,
 }: Props) {
+  const [subTab, setSubTab] = useState<SubTab>('json-schema');
   const [copied, setCopied] = useState(false);
+
+  const activeSource =
+    result === null
+      ? ''
+      : subTab === 'json-schema'
+        ? result.jsonSchema.source
+        : subTab === 'typescript'
+          ? result.typescript.source
+          : result.zod.source;
 
   const handleCopy = async () => {
     if (!result) return;
     try {
-      await navigator.clipboard.writeText(result.source);
+      await navigator.clipboard.writeText(activeSource);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -59,15 +70,19 @@ export function SchemaPane({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1">
-        <Tabs value="json-schema" className="flex-1">
+        <Tabs
+          value={subTab}
+          onValueChange={(v) => setSubTab(v as SubTab)}
+          className="flex-1"
+        >
           <TabsList variant="line" className="h-7">
             <TabsTrigger value="json-schema" className="text-xs">
               JSON Schema
             </TabsTrigger>
-            <TabsTrigger value="typescript" className="text-xs" disabled>
+            <TabsTrigger value="typescript" className="text-xs">
               TypeScript
             </TabsTrigger>
-            <TabsTrigger value="zod" className="text-xs" disabled>
+            <TabsTrigger value="zod" className="text-xs">
               Zod
             </TabsTrigger>
           </TabsList>
@@ -79,7 +94,7 @@ export function SchemaPane({
             onClick={handleCopy}
             disabled={!result || loading}
             className="h-7 gap-1 px-2 text-xs"
-            title="Copy schema source to clipboard"
+            title="Copy current format's source to clipboard"
           >
             <Copy className="size-3" />
             {copied ? 'Copied' : 'Copy'}
@@ -124,12 +139,12 @@ export function SchemaPane({
         )}
         {!loading && !error && result && (
           <pre className="m-0 overflow-auto p-3 font-mono text-xs leading-relaxed">
-            {result.source}
+            {activeSource}
           </pre>
         )}
       </div>
       <div className="text-muted-foreground bg-muted/30 border-t px-3 py-1.5 text-xs">
-        Required = present in 100% of samples
+        Required = present in all samples · Nullable = null in any sample
       </div>
     </div>
   );
