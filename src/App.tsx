@@ -2,7 +2,7 @@ import { ClientOnly, Head } from 'vite-react-ssg';
 import { AppShell } from '@/components/layout/AppShell';
 import { ResizablePanes } from '@/components/layout/ResizablePanes';
 import { MonacoPane } from '@/components/editor/MonacoPane';
-import { TreeView } from '@/components/tree/TreeView';
+import { RightPane } from '@/components/tree/RightPane';
 
 // TooltipProvider + Toaster live in RootLayout so they wrap all routes.
 // MonacoPane is wrapped in <ClientOnly>: Monaco's CSS imports break SSG
@@ -25,7 +25,7 @@ function App() {
               {() => <MonacoPane />}
             </ClientOnly>
           }
-          right={<TreeView />}
+          right={<RightPane />}
         />
       </AppShell>
     </>
