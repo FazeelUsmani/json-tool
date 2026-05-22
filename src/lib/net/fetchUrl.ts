@@ -47,9 +47,11 @@ export interface FetchUrlOptions {
   signal?: AbortSignal;
 }
 
-// TODO(W3): bump to 500MB once Tokenizer.onToken streaming parser lands —
-// today's main-thread JSON.parse path can't handle that without OOM.
-const DEFAULT_MAX_BYTES = 100 * 1024 * 1024; // 100 MiB
+// Matches the file-drop hero claim (500 MB ceiling in MonacoPane).
+// The streaming Tokenizer.onToken parser shipped in W3 — `?url=` no
+// longer needs the lower 100 MiB cap that the old main-thread
+// JSON.parse path required to avoid tab OOM.
+const DEFAULT_MAX_BYTES = 500 * 1024 * 1024; // 500 MiB
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ALLOWED_CONTENT_TYPES: readonly string[] = [
   'application/json',

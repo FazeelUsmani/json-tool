@@ -53,11 +53,14 @@ describe('fetchUrl', () => {
   });
 
   test('rejects when Content-Length exceeds maxBytes', async () => {
+    // Default cap is 500 MiB (matches the file-drop hero ceiling).
+    // Use 600 MiB so the over-limit assertion stays meaningful even
+    // if downstream tweaks the constant by a small amount.
     (globalThis.fetch as FetchMock).mockResolvedValue(
       makeResponse('', {
         headers: {
           'content-type': 'application/json',
-          'content-length': String(200 * 1024 * 1024),
+          'content-length': String(600 * 1024 * 1024),
         },
       }),
     );
@@ -68,8 +71,8 @@ describe('fetchUrl', () => {
     if (result.ok) return;
     expect(result.error.kind).toBe('too-large');
     if (result.error.kind !== 'too-large') return;
-    expect(result.error.contentLength).toBe(200 * 1024 * 1024);
-    expect(result.error.max).toBe(100 * 1024 * 1024);
+    expect(result.error.contentLength).toBe(600 * 1024 * 1024);
+    expect(result.error.max).toBe(500 * 1024 * 1024);
   });
 
   test('rejects disallowed content-type', async () => {

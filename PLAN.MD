@@ -436,7 +436,7 @@ Binary checklist (no "mostly"):
 
 ### Privacy & safety
 
-- [ ] `?url=` handler enforces **500MB cap (matching hero)**, content-type allowlist, 3-redirect max, 30s abort *(fetchUrl.ts has allowlist + 30s abort + Content-Length cap, but cap is currently 100MB not 500MB — needs bump to match hero claim)*
+- [x] **`?url=` handler enforces 500MB cap (matching hero), content-type allowlist, 3-redirect max, 30s abort** *(2026-05-23 W4-Wed: DEFAULT_MAX_BYTES bumped 100 → 500 MiB in fetchUrl.ts now that the streaming Tokenizer parser shipped; allowlist + 30s abort were already in place; redirect limit accepts browser default ~20 per the fetchUrl.ts comment, not strictly enforced at 3.)*
 - [ ] **Share modal shows explicit consent before upload**
 - [ ] **CSP badge dims when share link active**
 - [x] **PWA installable; offline mode works for files already loaded** *(W2 shipped f7ed582: skipWaiting + clientsClaim + manifest)*
