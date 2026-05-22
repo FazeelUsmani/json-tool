@@ -80,20 +80,33 @@ Captured against the production bundle through commit `5956906` (Memory HUD ship
 
 The 505 MB browser run required a temporary `MAX_FILE_BYTES` bump from 500 → 520 MB in `MonacoPane.tsx` to bypass the public-claim ceiling for measurement purposes (working-tree only, never committed). Production cap is unchanged at 500 MB.
 
-### Lighthouse — `/` route via DevTools panel
+### Lighthouse via DevTools panel
 
 CLI runs against `pnpm preview` are still blocked by the `Page.navigate: Target closed` issue (likely SW + SPA + headless interaction; deferred). DevTools Lighthouse panel works, so all 2026-05-22 Lighthouse numbers are panel-captured: single-page session, slow-4G throttling, Mobile (Moto G Power emulation), Chromium 147.
 
-| Category         | Score | Driver                                                                                                                          |
-|------------------|-------|----------------------------------------------------------------------------------------------------------------------------------|
-| Performance      | 95    | FCP 2.3 s · LCP 2.3 s · TBT 40 ms · CLS 0 · SI 3.2 s                                                                             |
-| Accessibility    | 100   | All automated checks pass                                                                                                        |
-| Best Practices   | 77    | -23 from missing security headers (CSP, HSTS, COOP, XFO, Trusted Types) — deploy-target config, not code                         |
-| SEO              | 63    | -37 from `is-crawlable` audit firing on temporary `Disallow: /` in `dist/robots.txt`. Flips to ~95+ when brand domain cuts over. |
+| Route                 | Perf    | A11y | Best Practices | SEO | Web Vitals (FCP · LCP · TBT · CLS · SI)     |
+|-----------------------|---------|------|----------------|-----|---------------------------------------------|
+| `/`                   | 95      | 100  | 77             | 63  | 2.3 s · 2.3 s · 40 ms · 0 · 3.2 s           |
+| `/large-json-viewer`  | **97**  | 100  | 77             | 63  | 2.1 s · 2.3 s · 40 ms · 0 · 2.1 s           |
 
-**`?debug=1` overhead, quantified:** rerunning on `/?debug=1` scores 90/96/73/63. The HUD costs ~5 Performance points and bumps TBT from 40 ms → 300 ms via the rAF polling loop + spine-metrics walk on each tick. Production users without `?debug=1` see the 95 baseline.
+**`/large-json-viewer` clears PLAN.MD's "Lighthouse 90+" launch-blocker target with 7-point margin.** This is the SEO landing route that markets the 500 MB ceiling — the explicit success metric for launch readiness. The `/` editor route at 95 Perf trails by 2 points because of the heavier interactive widget budget (Monaco lazy import, react-window mount, etc.).
 
-**Launch-blocker check `/large-json-viewer`** (PLAN.MD's explicit "Lighthouse 90+" target): pending; the `/` proxy at 95 Perf + same SSR shell suggests it'll pass, but needs direct measurement.
+**Code-side vs infra-side framing:**
+- **Code-side: 97 Perf + 100 A11y** — both clear the 90+ threshold; this is what we control via the bundle.
+- **Infra-side: 77 BP + 63 SEO** — both gated on deployment config, not code:
+  - Best Practices -23 from missing security headers (CSP, HSTS, COOP, XFO, Trusted Types) — flips when `public/_headers` lands at CF Pages cutover.
+  - SEO -37 from `is-crawlable` audit firing on the temporary `Disallow: /` in `dist/robots.txt` — flips to ~95+ when brand domain cuts over and robots opens to `Allow: /`.
+
+**`?debug=1` overhead, quantified:** rerunning `/` on `?debug=1` scores 90/96/73/63. The HUD costs ~5 Performance points and bumps TBT from 40 ms → 300 ms via the rAF polling loop + spine-metrics walk on each tick. Production users without `?debug=1` see the baseline.
+
+### Schema inference verification (W4-Mon close-out)
+
+All three emit formats browser-verified end-to-end:
+- **`telemetry-100.json`** (22 KB, well-formed) — JSON Schema + TypeScript + Zod render with correct required/optional/nullable mapping. Copy button respects the active sub-tab.
+- **`pathological-1000.json`** (1.2 MB, fixture explicitly built to break things) — worker survives the inference; all three emitters produce syntactically valid output. Edge-case keys confirmed:
+  - Mega-long word-only identifier (200+ chars) emitted bare via the safe-identifier check.
+  - Empty-string key emitted as `""?: T` / `"": z.X()` — non-identifier branch quotes correctly.
+- Strict-thresholding rule visible in the output: every field on the pathological fixture is `optional` because pathological records have fields absent in some samples (matches the footer chip's "Required = present in all samples · Nullable = null in any sample" disclosure).
 
 ### Interaction-to-Next-Paint at scale — newly identified regression
 
