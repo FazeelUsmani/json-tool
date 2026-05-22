@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDocumentStore } from '@/state/documentStore';
@@ -9,7 +10,9 @@ import {
   type FormatError,
   type FormatResult,
 } from '@/lib/json/format';
+import { repair } from '@/lib/json/repair';
 import { fetchUrl, type FetchUrlError } from '@/lib/net/fetchUrl';
+import { RepairDialog } from './RepairDialog';
 
 type Transform = (text: string) => FormatResult;
 
@@ -30,6 +33,39 @@ export function EditorToolbar({ error, setError }: Props) {
   // Tracked separately from source.url (which holds the resolved finalUrl
   // from fetchUrl). When they differ, a redirect happened — surface it.
   const [requestedUrl, setRequestedUrl] = useState<string | null>(null);
+  // Repair dialog state: null = closed; { before, after } = open with
+  // those two strings populating the Monaco diff editor.
+  const [repairCandidate, setRepairCandidate] = useState<{
+    before: string;
+    after: string;
+  } | null>(null);
+
+  const handleRepair = () => {
+    if (text.trim() === '') {
+      toast('Nothing to repair — paste some JSON first.');
+      return;
+    }
+    const result = repair(text);
+    switch (result.kind) {
+      case 'already-valid':
+        toast.success('Already valid JSON — no repair needed.');
+        return;
+      case 'repaired':
+        setRepairCandidate({ before: text, after: result.repaired });
+        return;
+      case 'unrepairable':
+        toast.error(`Could not repair: ${result.error}`);
+        return;
+    }
+  };
+
+  const applyRepair = () => {
+    if (repairCandidate === null) return;
+    setText(repairCandidate.after, source ?? { kind: 'paste' });
+    setError(null);
+    setRepairCandidate(null);
+    toast.success('Repair applied.');
+  };
 
   const run = (transform: Transform) => {
     if (text.trim() === '') return;
@@ -93,6 +129,9 @@ export function EditorToolbar({ error, setError }: Props) {
         <Button variant="outline" size="sm" onClick={() => run(sortKeysJson)}>
           Sort keys
         </Button>
+        <Button variant="outline" size="sm" onClick={handleRepair}>
+          Repair
+        </Button>
         <Input
           value={urlInput}
           onChange={(e) => setUrlInput(e.target.value)}
@@ -133,6 +172,13 @@ export function EditorToolbar({ error, setError }: Props) {
           ) : null}
         </div>
       )}
+      <RepairDialog
+        open={repairCandidate !== null}
+        before={repairCandidate?.before ?? ''}
+        after={repairCandidate?.after ?? ''}
+        onApply={applyRepair}
+        onCancel={() => setRepairCandidate(null)}
+      />
     </div>
   );
 }
