@@ -20,9 +20,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useViewStore } from '@/state/viewStore';
-import { getLastParseStats, isParsing } from '@/state/parserHost';
+import {
+  getLastParseStats,
+  isParsing,
+  type LastParseStats,
+} from '@/state/parseStats';
 import { computeSpineMetrics, type SpineMetrics } from '@/lib/tree/metrics';
-import type { LastParseStats } from '@/state/parserHost';
 import type { TreeNode } from '@/lib/tree/parse';
 
 const TICK_INTERVAL_MS = 100; // 10Hz cap on HUD re-renders

@@ -10,6 +10,7 @@ import {
   searchStubs,
   abortSearch,
 } from '@/state/parserHost';
+import { recordParseStats, setParseInFlight } from '@/state/parseStats';
 import { detectNdjson } from '@/lib/json/ndjson';
 import { parseNdjson } from '@/lib/parser/parse-ndjson';
 import { useStubExpansion } from '@/state/useStubExpansion';
@@ -123,15 +124,37 @@ export function TreeView() {
         const isNdjson = detectNdjson(headBytes);
         setParseMode(isNdjson ? 'ndjson' : 'json');
         if (isNdjson) {
+          // parseNdjson runs main-thread and doesn't go through parserHost's
+          // worker boundary, so the wall-clock timing has to be captured
+          // here — matches what parserHost.parseFile does internally for
+          // the JSON path. recordParseStats writes the shared HUD store
+          // either way.
+          const t0 = performance.now();
+          setParseInFlight(true);
           parseNdjson(blob)
             .then((result) => {
               if (cancelled) return;
+              const ms = Math.round(performance.now() - t0);
+              const mbPerSec = blob.size / 1024 / 1024 / (ms / 1000);
+              // eslint-disable-next-line no-console
+              console.log(
+                `[parser] parseNdjson ${(blob.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
+              );
+              recordParseStats({
+                ms,
+                bytes: blob.size,
+                mbPerSec,
+                completedAt: performance.now(),
+              });
               setRoot(result.root);
               setParseError(null);
             })
             .catch((err: Error) => {
               if (cancelled) return;
               setParseError({ message: err.message });
+            })
+            .finally(() => {
+              setParseInFlight(false);
             });
           return;
         }

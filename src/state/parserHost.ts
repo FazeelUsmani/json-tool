@@ -18,6 +18,7 @@ import type {
   ParseProgress,
   ParseResult,
 } from '@/lib/parser/parser-types';
+import { recordParseStats, setParseInFlight } from './parseStats';
 
 let workerInstance: Worker | null = null;
 let api: Comlink.Remote<ParserWorkerAPI> | null = null;
@@ -29,28 +30,6 @@ let api: Comlink.Remote<ParserWorkerAPI> | null = null;
 // handler discriminate cancellation from genuine worker errors so it can
 // log the latter without swallowing the former.
 let activeParseFileId = 0;
-
-// Telemetry snapshot for the most recent successful parseFile. The HUD
-// (?debug=1) reads this on each tick. Stored here rather than in
-// viewStore because parserHost already owns the wall-clock timing and
-// viewStore's "tipping point" comment warns against growing it further.
-// Null until the first successful parse.
-export type LastParseStats = {
-  ms: number;
-  bytes: number;
-  mbPerSec: number;
-  completedAt: number;
-};
-let lastParseStats: LastParseStats | null = null;
-let parseInFlight = false;
-
-export function getLastParseStats(): LastParseStats | null {
-  return lastParseStats;
-}
-
-export function isParsing(): boolean {
-  return parseInFlight;
-}
 
 function ensureWorker(): Comlink.Remote<ParserWorkerAPI> {
   if (api && workerInstance) return api;
@@ -86,7 +65,7 @@ export async function parseFile(
   const remote = ensureWorker();
   const cb = onProgress ?? (() => {});
   const t0 = performance.now();
-  parseInFlight = true;
+  setParseInFlight(true);
   try {
     const result = await remote.parseFile(file, Comlink.proxy(cb));
     if (myId !== activeParseFileId) {
@@ -101,12 +80,12 @@ export async function parseFile(
     console.log(
       `[parser] parseFile ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
     );
-    lastParseStats = {
+    recordParseStats({
       ms,
       bytes: file.size,
       mbPerSec,
       completedAt: performance.now(),
-    };
+    });
     return result;
   } catch (err) {
     // Worker termination during a superseded call may reject the pending
@@ -120,7 +99,7 @@ export async function parseFile(
   } finally {
     // Only clear the flag if we're still the current parse. A superseded
     // call shouldn't flip the flag off while a newer parse is mid-flight.
-    if (myId === activeParseFileId) parseInFlight = false;
+    if (myId === activeParseFileId) setParseInFlight(false);
   }
 }
 
