@@ -100,7 +100,7 @@ Day-1 spike already done (2026-05-14): `@streamparser/json` selected.
 - Browser floor: Chrome/Edge/Firefox/Safari latest-2.
 - Auth: deferred to Month 2; Month 1 is email capture only with **specific value exchange** (see W4 Thursday).
 - Name + domain: 3 candidates by **Mon W2**, trademark/USPTO/npm/GitHub/Twitter/.com checks done by **Wed W2**, decision and registration by **Fri W2**. PayloadIQ is the default but requires availability confirmation across all surfaces.
-- Launch: soft-committed to end of Week 4.
+- Launch: soft-committed to end of Week 4. **Slipped per 2026-05-22 engineering assessment** (`ENGINEERING_ASSESSMENT.md`): pre-launch correctness work + production gates require ~3 additional days. Realistic target now is W5-Mon/Tue. See `launch-readiness-gate.md` for the ship-blocker punch list separate from the build verification.
 - Customer discovery: 5 calls in Month 1.
 
 ---

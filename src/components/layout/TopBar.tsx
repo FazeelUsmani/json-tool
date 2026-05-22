@@ -18,11 +18,14 @@ export function TopBar() {
           <TooltipTrigger asChild>
             <Badge variant="outline" className="gap-1.5">
               <span className="size-1.5 rounded-full bg-emerald-500" />
-              100% client-side
+              Your JSON stays local
             </Badge>
           </TooltipTrigger>
-          <TooltipContent>
-            Your JSON never leaves the browser. View the CSP headers.
+          <TooltipContent className="max-w-xs">
+            Your JSON never leaves the browser — parsing, search, schema
+            inference all run client-side. We use Plausible for privacy-
+            friendly anonymous analytics (no JSON content, no user
+            identifiers, no third-party trackers). View the CSP headers.
           </TooltipContent>
         </Tooltip>
       </div>
