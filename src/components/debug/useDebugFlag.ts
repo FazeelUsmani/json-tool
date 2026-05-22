@@ -2,13 +2,17 @@
 // diagnostic surfaces mount only when this is true so production users
 // pay zero cost (no polling, no extra components in the React tree).
 //
-// Read at mount time and re-read on `popstate` so back/forward navigation
-// flips the flag without a full reload. SSR-safe: returns false when
-// window is undefined (vite-react-ssg's static build pass runs in Node).
+// Hydration discipline: initial state is ALWAYS false so SSR (which
+// renders without window) and the client's first render agree on the
+// React tree. The actual flag read happens inside useEffect after
+// mount — a state update at that point safely re-renders with the
+// HUD if ?debug=1 is set, without triggering React error #418
+// (hydration mismatch). One frame's delay before the HUD appears in
+// debug mode, which is invisible to users (they only see it after
+// hydration completes anyway).
 //
-// If granular flags become useful later (e.g. ?debug=hud,events,perf)
-// this becomes a one-line parser change — keep the value opaque for now
-// to avoid premature scheme design.
+// popstate listener catches back/forward navigation flipping the flag
+// without a full reload.
 
 import { useEffect, useState } from 'react';
 
@@ -19,9 +23,11 @@ function readFlag(): boolean {
 }
 
 export function useDebugFlag(): boolean {
-  const [enabled, setEnabled] = useState<boolean>(() => readFlag());
+  // Start false to match SSR. Real value lands in the post-mount effect.
+  const [enabled, setEnabled] = useState<boolean>(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    setEnabled(readFlag());
     const handler = () => setEnabled(readFlag());
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
