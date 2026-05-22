@@ -23,6 +23,7 @@
 // lift this into `z.union([...])` when we add union support.
 
 import type { IRField, IRSchema } from './types';
+import { isSafeIdentifier } from './identifier';
 
 export type ZodEmitResult = {
   source: string;
@@ -98,6 +99,3 @@ function emitObject(fields: Map<string, IRField>, depth: number): string {
   return lines.join('\n');
 }
 
-function isSafeIdentifier(s: string): boolean {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
-}

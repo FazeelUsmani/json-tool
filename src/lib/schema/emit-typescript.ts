@@ -30,6 +30,7 @@
 // and keeps the emitter generator simple.
 
 import type { IRField, IRSchema } from './types';
+import { isSafeIdentifier } from './identifier';
 
 export type TypeScriptEmitResult = {
   source: string;
@@ -95,9 +96,3 @@ function emitObject(
   return nullableSuffix(lines.join('\n'), nullable);
 }
 
-// JS identifiers: letters, digits, `_`, `$`, can't start with a
-// digit. Anything else gets JSON.stringify'd which wraps it in
-// double quotes with the right escaping.
-function isSafeIdentifier(s: string): boolean {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
-}

@@ -23,7 +23,7 @@
 
 import type { TreeNode } from '@/lib/tree/parse';
 import type { IRField, IRSchema } from './types';
-import { sampleIndices } from './sample';
+import { rangeAll, sampleIndices } from './sample';
 
 export type FetchStubValue = (
   byteStart: number,
@@ -147,12 +147,6 @@ function walkValue(value: unknown): IRSchema {
   // output. Emit a no-information mixed so callers see something
   // explicit if it ever happens (vs silently misclassifying).
   return { kind: 'mixed', observed: [], nullable: false };
-}
-
-function rangeAll(n: number): number[] {
-  const out = new Array<number>(n);
-  for (let i = 0; i < n; i++) out[i] = i;
-  return out;
 }
 
 // --- merging ---

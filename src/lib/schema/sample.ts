@@ -18,7 +18,7 @@
 
 export function sampleIndices(n: number, k: number): number[] {
   if (n <= 0 || k <= 0) return [];
-  if (k >= n) return walkAll(n);
+  if (k >= n) return rangeAll(n);
   const set = new Set<number>();
   while (set.size < k) {
     set.add(Math.floor(Math.random() * n));
@@ -26,7 +26,7 @@ export function sampleIndices(n: number, k: number): number[] {
   return [...set];
 }
 
-function walkAll(n: number): number[] {
+export function rangeAll(n: number): number[] {
   const out = new Array<number>(n);
   for (let i = 0; i < n; i++) out[i] = i;
   return out;

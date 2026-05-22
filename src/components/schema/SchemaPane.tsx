@@ -23,6 +23,7 @@ import { AlertCircle, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { copyText } from '@/lib/clipboard';
 import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
 
 type Props = {
@@ -45,25 +46,23 @@ export function SchemaPane({
   const [subTab, setSubTab] = useState<SubTab>('json-schema');
   const [copied, setCopied] = useState(false);
 
-  const activeSource =
+  const sourceBySubTab: Record<SubTab, string> =
     result === null
-      ? ''
-      : subTab === 'json-schema'
-        ? result.jsonSchema.source
-        : subTab === 'typescript'
-          ? result.typescript.source
-          : result.zod.source;
+      ? { 'json-schema': '', typescript: '', zod: '' }
+      : {
+          'json-schema': result.jsonSchema.source,
+          typescript: result.typescript.source,
+          zod: result.zod.source,
+        };
+  const activeSource = sourceBySubTab[subTab];
 
   const handleCopy = async () => {
     if (!result) return;
-    try {
-      await navigator.clipboard.writeText(activeSource);
+    // Silent on clipboard failure (insecure context); user can select
+    // + copy manually from the displayed source.
+    if (await copyText(activeSource)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard API unavailable (insecure context). User can still
-      // select + copy manually from the displayed source. Silent
-      // failure — no need to nag with an error.
     }
   };
 

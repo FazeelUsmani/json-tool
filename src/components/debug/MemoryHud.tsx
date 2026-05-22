@@ -82,6 +82,29 @@ function deriveWorkerStatus(
   return { kind: 'idle' };
 }
 
+function workerEqual(a: WorkerStatus, b: WorkerStatus): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'searching' && b.kind === 'searching') {
+    return a.scanned === b.scanned && a.total === b.total;
+  }
+  if (a.kind === 'expanding' && b.kind === 'expanding') {
+    return a.count === b.count;
+  }
+  return true;
+}
+
+function snapshotEqual(a: Snapshot, b: Snapshot): boolean {
+  return (
+    a.parse === b.parse &&
+    a.blobBytes === b.blobBytes &&
+    a.flatCount === b.flatCount &&
+    a.metrics === b.metrics &&
+    a.parseMode === b.parseMode &&
+    a.mainHeapBytes === b.mainHeapBytes &&
+    workerEqual(a.worker, b.worker)
+  );
+}
+
 export function MemoryHud() {
   const [snapshot, setSnapshot] = useState<Snapshot>(INITIAL);
   // Memoize computeSpineMetrics across ticks: if root identity is
@@ -103,7 +126,7 @@ export function MemoryHud() {
           lastRootRef.current = view.root;
           lastMetricsRef.current = metrics;
         }
-        setSnapshot({
+        const next: Snapshot = {
           parse: getLastParseStats(),
           blobBytes: view.sourceBlob?.size ?? null,
           flatCount: view.flat.length,
@@ -115,7 +138,11 @@ export function MemoryHud() {
             view.expandingPaths.size,
           ),
           mainHeapBytes: readMainHeap(),
-        });
+        };
+        // Skip setState on no-change ticks (idle viewer). Without
+        // this, the HUD re-renders 10×/s forever even when nothing
+        // moved, and that churn itself shows up in the metrics.
+        setSnapshot((prev) => (snapshotEqual(prev, next) ? prev : next));
       }
       rafId = requestAnimationFrame(tick);
     };
