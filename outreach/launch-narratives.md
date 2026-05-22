@@ -12,12 +12,14 @@ Two narratives pre-baked per PLAN.MD W3 — pick one when the W3-Fri benchmark +
 | 200MB regular JSON solid; 500MB only works in indexed-mode (parse OK, full search slow, expand on demand); search needs explicit "keep going" UX | **B-narrative** |
 | Either + cold-email overlap <10% | Lead with B-narrative regardless of perf — wedge is shakier than performance |
 
-Current state (today, end of W3-Wed/Thu burst):
+Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 
-- 200MB regular JSON: validated end-to-end. 5.6–5.8s parse on Apple Silicon (M-series). Tab stays well under crash ceiling via viewer-only mode.
-- NDJSON: detection + line-offset index + line rendering + in-place caret expansion all shipped. Validated on 22KB and 43KB fixtures only — 200MB NDJSON fixture not yet generated.
-- 500MB regular JSON: untested. Architecture should scale (streaming worker + spine + stubs) but unverified.
-- Search slow path: NOT yet shipped (task #73). Current search only matches against materialized rows; misses content inside collapsed stubs / unexpanded lines.
+- **200MB regular JSON**: validated end-to-end. **5.6 s parse · 168 ms worst-case search-keystroke INP (under Chrome's "good" 200 ms threshold) · 262 MB heap on NDJSON / 1.16 GB on regular JSON.** Strongest demo size.
+- **200MB NDJSON**: validated end-to-end on `telemetry-900000.ndjson` (201 MB). 1.30× heap expansion vs 3.35× for regular JSON — a real B-narrative selling point.
+- **500MB regular JSON**: validated end-to-end on `telemetry-2250000.json` (505 MB). **13.9 s parse @ 36.4 MB/s · 560 ms worst-case search-keystroke INP (borderline poor by Lighthouse; type-to-filter works but felt as ~0.5 s feedback) · 1.69 GB heap peak / 1.16 GB steady.** Cap is 500 MB; 505 MB measured via temporary working-tree-only bump.
+- **Search slow path**: shipped (commit `c3a0747`). Byte-level scan in worker, progress bar, abort on new keystroke.
+- **Schema inference**: shipped W4-Mon (commits `f4a4bac` → `7efd062`). JSON Schema / TypeScript / Zod from any loaded file via Schema sub-tab.
+- **Lighthouse `/large-json-viewer`**: 97 / 100 / 77 / 63 (code-side 97 + 100 pass PLAN.MD's 90+ target; infra-side 77 + 63 are deploy-time gates — CSP headers + brand-domain `Allow: /` robots cutover).
 
 ---
 
@@ -91,6 +93,18 @@ Current state (today, end of W3-Wed/Thu burst):
 > Source: github.com/[brand]/json-tool. Nothing leaves your browser.
 >
 > Built on: @streamparser/json (Tokenizer-level, not JSONParser), Comlink, react-window. Comments welcome on the architecture write-up linked from the README.
+
+**Numbers backing the B-narrative claims (measured 2026-05-22, Apple Silicon M-series, Chrome 147):**
+
+| Size | Parse | Heap | Search-keystroke INP | Notes |
+|------|-------|------|----------------------|-------|
+| 200 MB regular JSON | 5.6 s | 1.16 GB | **168 ms** (worst) / 24–96 ms (typical) | Below Chrome's "good" 200 ms INP threshold |
+| 201 MB NDJSON       | ~0.6 s* | 262 MB | (same as above) | 1.30× heap expansion vs 3.35× for regular JSON |
+| 505 MB regular JSON | 13.9 s | 1.69 GB peak / 1.16 GB steady | **560 ms** (worst) / 344–472 ms (typical) | Type-to-filter works; "needs improvement" by Chrome's INP threshold |
+
+\* NDJSON parse log line wasn't captured in the 2026-05-22 session (HUD bug); fix shipped same day, re-measure next session. Heap + line-count + tab-survival all captured.
+
+The "indexed at 500 MB" language is honest: tree navigation + subtree expansion are instant; type-to-filter has ~0.5 s feedback at the high end; worker progress-bar search handles content-deep queries that exceed the materialized FlatRow array.
 
 ### OG / preview card
 

@@ -108,15 +108,22 @@ All three emit formats browser-verified end-to-end:
   - Empty-string key emitted as `""?: T` / `"": z.X()` — non-identifier branch quotes correctly.
 - Strict-thresholding rule visible in the output: every field on the pathological fixture is `optional` because pathological records have fields absent in some samples (matches the footer chip's "Required = present in all samples · Nullable = null in any sample" disclosure).
 
-### Interaction-to-Next-Paint at scale — newly identified regression
+### Interaction-to-Next-Paint at scale — identified and fixed
 
-During the 505 MB session with a search active, Chrome Performance Insights recorded **INP 2,000 ms** on search-input keystrokes (worst case; subsequent keystrokes 1,160–1,656 ms). The search worker scan runs off-thread per the W3-Thu slow-path design, but the synchronous `findMatches` walk over 2.25 M FlatRows + React reconciliation on each keystroke is main-thread.
+**Pre-fix observation.** During the 505 MB session with a search active, Chrome Performance Insights recorded **INP 2,000 ms** on search-input keystrokes (worst case; subsequent keystrokes 1,160–1,656 ms). The search worker scan runs off-thread per the W3-Thu slow-path design, but the synchronous `findMatches` walk over 2.25 M FlatRows + React reconciliation on each keystroke was main-thread. Same problem at 200 MB extrapolated to ~800 ms.
 
-| Fixture                       | INP worst | INP typical | Source |
-|-------------------------------|-----------|-------------|--------|
-| `telemetry-2250000.json`      | 2,000 ms  | 1,400 ms    | search keystroke at scale |
+**Pivot considered, then abandoned.** First instinct: move `findMatches` into the parser worker so the walk happens off-thread. A measurement checkpoint killed that approach — structured-cloning the FlatRow array to the worker via `postMessage` took **2,530 ms** at 200 MB (linear extrapolation: ~6,300 ms at 505 MB), and the clone serialization runs **on the main thread itself**. Net: we'd add 2.5 s of post-parse blocking to avoid a 2 s search-time blocking. Negative ROI.
 
-Not yet fixed. Tracked: debounce search-by-query OR move sync `findMatches` to a worker. Sized as a deliberate W4 slice with its own design pass.
+**Fix shipped.** Pre-lowercased the needle once per query and replaced per-row `String.toLowerCase().includes()` with `asciiCaseInsensitiveIncludes(haystack, needleLower)` — a tight loop that case-folds A-Z → a-z via the `c | 32` bit trick during comparison, without allocating a lowercase copy of every haystack. The prior approach allocated 2 × `flat.length` lowercase strings per keystroke (4.5 M allocations at 505 MB); the new path allocates zero per-row. ASCII-only fold matches the existing `searchStubs` worker behavior, so result sets stay consistent across the sync FlatRow walk and the worker byte scan.
+
+| Fixture                       | Pre-fix INP worst | Post-fix INP worst | Post-fix INP typical | Improvement |
+|-------------------------------|-------------------|--------------------|----------------------|-------------|
+| `telemetry-900000.json` (200 MB) | ~800 ms (proj.) | **168 ms** ✓ (under "good" 200 ms threshold) | 24–96 ms | ~5× |
+| `telemetry-2250000.json` (505 MB) | 2,000 ms        | **560 ms** (borderline poor, was poor) | 344–472 ms | ~4× |
+
+**200 MB now clears Chrome's "good" INP threshold of 200 ms** on worst-case keystrokes — that's the headline B-narrative size and the strongest claim we can make. 505 MB lands in "needs improvement / borderline poor" territory; type-to-filter works but feedback is felt as ~0.5 s at the high end. Documented honestly in the B-narrative launch copy.
+
+The reported overall INP at 505 MB (800 ms) is a **pointer** interaction on a tree row — distinct from search-keystroke INP. Tree-row click latency at 2.25 M rows is a separate cost (stub expand round-trip + react-window scroll-to-row) and out of scope for this fix.
 
 ### Bundle pinning — 2026-05-22
 

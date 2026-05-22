@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { collectStubRanges, findMatches } from './search';
+import {
+  asciiCaseInsensitiveIncludes,
+  collectStubRanges,
+  findMatches,
+} from './search';
 import { flattenTree } from './flatten';
 import { parseToTree, type TreeNode } from './parse';
 
@@ -261,5 +265,64 @@ describe('collectStubRanges', () => {
       ],
     };
     expect(collectStubRanges(root)).toHaveLength(1);
+  });
+});
+
+describe('asciiCaseInsensitiveIncludes', () => {
+  test('empty needle always matches', () => {
+    expect(asciiCaseInsensitiveIncludes('', '')).toBe(true);
+    expect(asciiCaseInsensitiveIncludes('anything', '')).toBe(true);
+  });
+
+  test('needle longer than haystack returns false', () => {
+    expect(asciiCaseInsensitiveIncludes('a', 'abc')).toBe(false);
+    expect(asciiCaseInsensitiveIncludes('', 'abc')).toBe(false);
+  });
+
+  test('case-insensitive match on ASCII letters', () => {
+    expect(asciiCaseInsensitiveIncludes('HELLO', 'hello')).toBe(true);
+    expect(asciiCaseInsensitiveIncludes('Hello World', 'world')).toBe(true);
+    expect(asciiCaseInsensitiveIncludes('userName', 'username')).toBe(true);
+  });
+
+  test('case-sensitive mismatch returns false', () => {
+    expect(asciiCaseInsensitiveIncludes('HELLO', 'world')).toBe(false);
+  });
+
+  test('matches at any position in haystack', () => {
+    expect(asciiCaseInsensitiveIncludes('prefix-needle-suffix', 'needle')).toBe(
+      true,
+    );
+    expect(asciiCaseInsensitiveIncludes('end-of-string', 'string')).toBe(true);
+    expect(asciiCaseInsensitiveIncludes('start-of-string', 'start')).toBe(true);
+  });
+
+  test('digits + symbols compared bit-for-bit (no case-folding)', () => {
+    expect(asciiCaseInsensitiveIncludes('item-123', '123')).toBe(true);
+    expect(asciiCaseInsensitiveIncludes('a@b.com', '@')).toBe(true);
+  });
+
+  test('non-ASCII chars stay case-sensitive (ASCII-only fold)', () => {
+    // Documents the trade-off vs JS toLowerCase: ASCII is case-folded,
+    // non-ASCII is not. Matches the searchStubs worker behavior so the
+    // sync FlatRow walk + worker byte scan return the same hits.
+    // (Test inputs assume `needleLower` was already lowercased by the
+    // caller — that's findMatches's contract.)
+    expect(asciiCaseInsensitiveIncludes('café', 'café')).toBe(true);
+    // Mixed-case non-ASCII does NOT fold: uppercase É (U+00C9) and
+    // lowercase é (U+00E9) compare bit-for-bit.
+    expect(asciiCaseInsensitiveIncludes('CAFÉbar', 'café')).toBe(false);
+    // Pure-ASCII portion folds normally even when the haystack
+    // includes non-ASCII elsewhere.
+    expect(asciiCaseInsensitiveIncludes('café BAR', 'bar')).toBe(true);
+  });
+
+  test('overlapping near-matches advance the cursor by one, not by needle length', () => {
+    // 'aab' / 'ab' — position 0 first-char matches, second-char fails;
+    // algorithm continues at position 1 (not 2) and finds 'ab' there.
+    expect(asciiCaseInsensitiveIncludes('aab', 'ab')).toBe(true);
+    // 'aba' / 'ba' — position 0 first-char mismatch (a vs b); algorithm
+    // continues at position 1 and finds 'ba'.
+    expect(asciiCaseInsensitiveIncludes('aba', 'ba')).toBe(true);
   });
 });
