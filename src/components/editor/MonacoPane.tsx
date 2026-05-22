@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useDocumentStore } from '@/state/documentStore';
 import { EditorToolbar } from './EditorToolbar';
+import { EmptyStateHero } from './EmptyStateHero';
 
 // Monaco is loaded lazily so it doesn't block first paint (it's ~2MB of
 // editor code + workers). The init module is imported first inside the lazy
@@ -147,6 +148,13 @@ export function MonacoPane() {
             name={viewerOnly.name}
             size={viewerOnly.size}
           />
+        ) : text === '' && source === null ? (
+          // Empty-state hero — no document loaded yet. Defers Monaco
+          // instantiation until the user actually needs the editor
+          // (drop / paste / sample click), shaving the editor module
+          // off the cold-load critical path. Drop handler is inherited
+          // from the parent div's onDrop above.
+          <EmptyStateHero />
         ) : (
           <Suspense
             fallback={
