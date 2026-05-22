@@ -419,8 +419,8 @@ Binary checklist (no "mostly"):
 - [ ] Name picked, **domain + GitHub org + npm scope + Twitter handle registered** (by Fri W2)
 - [x] Paste 1MB JSON → format → tree expands smoothly *(streaming worker handles paste path; Format/Minify/Sort buttons still synchronous on text)*
 - [x] **200MB JSON loads, renders spine, can navigate top 3 levels** *(2026-05-21: telemetry-900000.json 201MB → parseMs 5645–5800ms ≈ 34.7 MB/s, tab survives via viewer-only mode, tree populates with line/stub rows, expand-in-place works)*
-- [ ] 500MB JSON loads in <60s with progress bar, can navigate spine, search works *(2026-05-21: 200MB validated — search slow path shipped b52bec0 with progress bar; worker scan ~10s on 200MB telemetry, ~646K stub matches surfaced for "error". 500MB still untested at file level.)*
-- [ ] **200MB NDJSON loads, paginates by line, expand-line works** *(detection + line-offset index + LineRow lazy preview + drawer expansion shipped 2026-05-21 a07266f / 4f19364; in-place caret/Enter expansion shipped 8cd02d7; only validated on the 22KB and 43KB ndjson corpus fixtures — 200MB NDJSON fixture not yet generated/tested)*
+- [x] **500MB JSON loads in <60s with progress bar, can navigate spine, search works** *(2026-05-22: telemetry-2250000.json 505MB → 13858ms parse @ 36.4 MB/s, 1.69 GB heap peak / 1.16 GB steady, search-keystroke INP 560ms worst (560ms is borderline "poor" by Chrome thresholds — scoped honestly in B-narrative); spine navigates, search-slow-path with progress bar works; INP regression fix 5c4f3ca brought keystroke cost from 2s to 560ms via inline ASCII case-folding.)*
+- [x] **200MB NDJSON loads, paginates by line, expand-line works** *(2026-05-21 → 2026-05-22: detection + line-offset index + LineRow lazy preview + drawer expansion shipped a07266f / 4f19364; in-place caret/Enter expansion 8cd02d7; validated end-to-end 2026-05-22 on telemetry-900000.ndjson 201MB — 899,999 lines, 262 MB heap (1.30× source vs 3.35× for regular JSON — strong B-narrative material), worker idle post-parse.)*
 - [x] **Schema inference exports JSON Schema, TS, Zod from a 1MB JSON** *(2026-05-22 W4-Mon, commits f4a4bac → 7efd062: walker + sampler + 3 emitters + worker + host + UI tab; ~85 tests; all three formats browser-verified on telemetry-100.json + pathological-1000.json — edge-case keys (mega-long identifier, empty-string) both handled, strict-thresholding visible in output.)*
 - [ ] `jsonrepair` fixes a deliberately-broken LLM JSON sample
 - [ ] **Table view renders top-level array as sortable table**
@@ -450,7 +450,7 @@ Binary checklist (no "mostly"):
 ### Launch
 
 - [ ] Benchmark video recorded vs jsonhero / stack.hu / jsoncrack / jsoneditoronline (JSON + NDJSON fixtures)
-- [x] **Benchmark methodology page published** (hardware, browser, fixtures, repro) *(2026-05-21: see benchmarks/methodology.md — drafted from the 201MB cold-run data captured this session; needs to be wired to a public route + measurement gaps closed (500MB cold run, search wall-clock) before launch)*
+- [x] **Benchmark methodology page published** (hardware, browser, fixtures, repro) *(2026-05-21 → 2026-05-22: see benchmarks/methodology.md — initial 201MB data, expanded with 505MB browser cold-run + Lighthouse panel scores + INP regression + INP fix; needs to be wired to a public route before launch.)*
 - [x] **Both A and B launch narratives drafted** (HN post + OG + video script) by Fri W3 *(see outreach/launch-narratives.md, 2026-05-21)*
 - [ ] **A11y response pre-written for HN comments**
 - [ ] **Launch channel sequence queued:** HN → Reddit → Lobsters → Twitter → newsletters
