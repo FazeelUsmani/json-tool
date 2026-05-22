@@ -11,6 +11,7 @@ import {
   abortSearch,
 } from '@/state/parserHost';
 import { recordParseStats, setParseInFlight } from '@/state/parseStats';
+import { isDebugEnabled } from '@/components/debug/useDebugFlag';
 import { detectNdjson } from '@/lib/json/ndjson';
 import { parseNdjson } from '@/lib/parser/parse-ndjson';
 import { useStubExpansion } from '@/state/useStubExpansion';
@@ -136,10 +137,12 @@ export function TreeView() {
               if (cancelled) return;
               const ms = Math.round(performance.now() - t0);
               const mbPerSec = blob.size / 1024 / 1024 / (ms / 1000);
-              // eslint-disable-next-line no-console
-              console.log(
-                `[parser] parseNdjson ${(blob.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
-              );
+              if (isDebugEnabled()) {
+                // eslint-disable-next-line no-console
+                console.log(
+                  `[parser] parseNdjson ${(blob.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
+                );
+              }
               recordParseStats({
                 ms,
                 bytes: blob.size,

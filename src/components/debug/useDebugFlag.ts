@@ -22,6 +22,13 @@ function readFlag(): boolean {
   return params.get('debug') === '1';
 }
 
+// Non-hook sync read of the same `?debug=1` flag, for module-level
+// callers (parserHost, TreeView) that gate console.log lines. Safe
+// during SSR (returns false when window is undefined).
+export function isDebugEnabled(): boolean {
+  return readFlag();
+}
+
 export function useDebugFlag(): boolean {
   // Start false to match SSR. Real value lands in the post-mount effect.
   const [enabled, setEnabled] = useState<boolean>(false);

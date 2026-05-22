@@ -11,7 +11,7 @@
 // first). Side-by-side mode is the idiomatic diff-review shape for
 // developers. Zero new bundle dependency.
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useDarkClass } from '@/lib/theme/useDarkClass';
 
 // Same lazy-load pattern as MonacoPane's main editor. initMonaco()
 // is idempotent so calling it again here is safe even if the main
@@ -106,23 +107,3 @@ export function RepairDialog({
   );
 }
 
-// Mirrors MonacoPane's useDarkClass — couldn't share without an
-// export-only refactor that doesn't pay off until a third consumer
-// shows up. ~10 lines of duplication is the right call for now.
-function useDarkClass(): boolean {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof document === 'undefined') return false;
-    return document.documentElement.classList.contains('dark');
-  });
-  useEffect(() => {
-    const obs = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => obs.disconnect();
-  }, []);
-  return isDark;
-}

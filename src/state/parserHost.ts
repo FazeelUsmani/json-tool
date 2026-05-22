@@ -18,6 +18,7 @@ import type {
   ParseProgress,
   ParseResult,
 } from '@/lib/parser/parser-types';
+import { isDebugEnabled } from '@/components/debug/useDebugFlag';
 import { recordParseStats, setParseInFlight } from './parseStats';
 
 let workerInstance: Worker | null = null;
@@ -76,10 +77,12 @@ export async function parseFile(
     }
     const ms = Math.round(performance.now() - t0);
     const mbPerSec = file.size / 1024 / 1024 / (ms / 1000);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[parser] parseFile ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
-    );
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[parser] parseFile ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
+      );
+    }
     recordParseStats({
       ms,
       bytes: file.size,

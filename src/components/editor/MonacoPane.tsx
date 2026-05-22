@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useDocumentStore } from '@/state/documentStore';
+import { useDarkClass } from '@/lib/theme/useDarkClass';
 import { EditorToolbar } from './EditorToolbar';
 import { EmptyStateHero } from './EmptyStateHero';
 
@@ -23,27 +24,6 @@ const MAX_FILE_BYTES = 500 * 1024 * 1024;
 // reads the File via .stream() and populates the tree pane normally.
 const VIEWER_ONLY_THRESHOLD = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.json', '.ndjson', '.jsonl'] as const;
-
-function useDarkClass(): boolean {
-  // Guard for SSG: vite-react-ssg prerenders this component in Node, where
-  // `document` doesn't exist. Default to light during prerender; the real
-  // value is applied on hydration via the MutationObserver effect.
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof document === 'undefined') return false;
-    return document.documentElement.classList.contains('dark');
-  });
-  useEffect(() => {
-    const obs = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => obs.disconnect();
-  }, []);
-  return isDark;
-}
 
 export function MonacoPane() {
   const text = useDocumentStore((s) => s.text);
