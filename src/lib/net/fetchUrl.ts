@@ -71,7 +71,6 @@ export async function fetchUrl(
 
   // (1) URL parse — rejects "not a url" before we touch fetch.
   try {
-    // eslint-disable-next-line no-new
     new URL(url);
   } catch {
     return { ok: false, error: { kind: 'invalid-url' } };

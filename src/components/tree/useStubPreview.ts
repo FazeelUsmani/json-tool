@@ -119,6 +119,7 @@ export function useStubPreview(
     };
     // range is identity-stable when caller wraps with useMemo; otherwise
     // the byteStart/byteEnd will be the actual change driver.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceBlob, rowId, range?.byteStart, range?.byteEnd]);
 
   return previewText;

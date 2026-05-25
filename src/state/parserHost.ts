@@ -78,7 +78,6 @@ export async function parseFile(
     const ms = Math.round(performance.now() - t0);
     const mbPerSec = file.size / 1024 / 1024 / (ms / 1000);
     if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console
       console.log(
         `[parser] parseFile ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
       );

@@ -4,7 +4,7 @@
 //   SMOKE=1 pnpm exec vitest run benchmarks/smoke-200mb.test.ts
 
 import { test } from 'vitest';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { parseStreaming } from '@/lib/parser/parse-streaming';
@@ -25,7 +25,6 @@ test.skipIf(!process.env.SMOKE)('200MB smoke', async () => {
   const tIO = performance.now();
   const stream = useMemStream
     ? (() => {
-        const { readFileSync } = require('node:fs') as typeof import('node:fs');
         const buf = readFileSync(FIXTURE);
         return new ReadableStream({
           start(c) {
@@ -53,7 +52,6 @@ test.skipIf(!process.env.SMOKE)('200MB smoke', async () => {
 
   const mb = (n: number) => Math.round((n / 1024 / 1024) * 10) / 10;
 
-  // eslint-disable-next-line no-console
   console.log(
     '\nSMOKE ' +
       JSON.stringify(
@@ -116,19 +114,18 @@ test.skipIf(!process.env.SMOKE)('200MB smoke', async () => {
       );
     } else if (r.kind === 'leaf') {
       const n = r.node;
-      let v = '';
-      if (n.kind === 'object' || n.kind === 'array') {
-        v = n.kind === 'object' ? '{}' : '[]';
-      } else if (n.kind === 'string') {
-        v = `"${n.value}"`;
-      } else if (n.kind === 'number' || n.kind === 'boolean') {
-        v = String(n.value);
-      } else {
-        v = 'null';
-      }
+      const v =
+        n.kind === 'object'
+          ? '{}'
+          : n.kind === 'array'
+            ? '[]'
+            : n.kind === 'string'
+              ? `"${n.value}"`
+              : n.kind === 'number' || n.kind === 'boolean'
+                ? String(n.value)
+                : 'null';
       snapshot.push(`${pad}  ${keyPart}${v}`);
     }
   }
-  // eslint-disable-next-line no-console
   console.log('\nTOP-20-ROWS:\n' + snapshot.join('\n'));
 }, 600_000);

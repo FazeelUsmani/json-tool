@@ -49,7 +49,7 @@ export function detectNdjson(
   const head = bytes.subarray(0, Math.min(sampleBytes, bytes.byteLength));
   const decoded = decodeUtf8Lossy(head);
 
-  // Skip a UTF-8 BOM (the decoder may pass it through as ﻿).
+  // Skip a UTF-8 BOM (the decoder may pass it through as U+FEFF).
   let cursor = decoded.charCodeAt(0) === 0xfeff ? 1 : 0;
   // Skip leading whitespace before the first record.
   while (cursor < decoded.length && isJsonWhitespace(decoded.charCodeAt(cursor))) {

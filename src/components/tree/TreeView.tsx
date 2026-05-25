@@ -113,12 +113,14 @@ export function TreeView() {
       // then route through the right parser. Detection sample is 4KB
       // so the slice/decode is cheap even on huge files.
       const head = parseSource.slice(0, 4 * 1024);
-      head
-        .bytes
+      // Fire-and-forget: detectAndParse resolves async; the cancelled
+      // flag inside it handles supersede. `void` marks the discarded
+      // Promise explicitly for the no-unused-expressions rule.
+      void (head.bytes
         ? head.bytes().then((b) => detectAndParse(parseSource, b))
         : head
             .arrayBuffer()
-            .then((ab) => detectAndParse(parseSource, new Uint8Array(ab)));
+            .then((ab) => detectAndParse(parseSource, new Uint8Array(ab))));
 
       function detectAndParse(blob: Blob, headBytes: Uint8Array) {
         if (cancelled) return;
@@ -138,7 +140,6 @@ export function TreeView() {
               const ms = Math.round(performance.now() - t0);
               const mbPerSec = blob.size / 1024 / 1024 / (ms / 1000);
               if (isDebugEnabled()) {
-                // eslint-disable-next-line no-console
                 console.log(
                   `[parser] parseNdjson ${(blob.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
                 );
@@ -194,7 +195,6 @@ export function TreeView() {
             if (isAbort) return;
             const message =
               err instanceof Error ? err.message : String(err);
-            // eslint-disable-next-line no-console
             console.error('[parser] parseFile failed:', err);
             setParseError({ message });
           });

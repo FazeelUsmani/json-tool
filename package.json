@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc -b",
     "build": "tsc -b && vite-react-ssg build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -15,6 +16,10 @@
     "test": "vitest",
     "test:run": "vitest run"
   },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "packageManager": "npm@10.5.0",
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
     "@monaco-editor/react": "^4.7.0",
