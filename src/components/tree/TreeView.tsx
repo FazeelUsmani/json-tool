@@ -384,7 +384,12 @@ export function TreeView() {
     setQuery,
     openDrawer,
     containerRef,
-    expandStubRow,
+    expandStubRow: (row) => {
+      // expandStubRow is async; keyboard nav expects a sync handler.
+      // Fire-and-forget — errors surface via toast inside the expansion
+      // pipeline.
+      void expandStubRow(row);
+    },
     expandingIds,
     clearExpanding: (id) => setExpanding(id, false),
   });

@@ -90,7 +90,9 @@ export function SchemaPane({
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleCopy}
+            onClick={() => {
+              void handleCopy();
+            }}
             disabled={!result || loading}
             className="h-7 gap-1 px-2 text-xs"
             title="Copy current format's source to clipboard"

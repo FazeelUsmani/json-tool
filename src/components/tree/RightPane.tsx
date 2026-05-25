@@ -148,7 +148,9 @@ export function RightPane() {
           loading={loading}
           error={error}
           stale={stale}
-          onRefresh={runInfer}
+          onRefresh={() => {
+            void runInfer();
+          }}
         />
       </TabsContent>
       <TabsContent

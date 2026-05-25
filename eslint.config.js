@@ -9,7 +9,10 @@ export default defineConfig([
   // `spikes/` is the throw-away exploratory directory — kept out of
   // production paths via tsconfig but worth excluding from lint too
   // so unused-vars / experimental code doesn't block the gate.
-  globalIgnores(['dist', 'spikes/**']),
+  // `benchmarks/` is dev-only scripts + a `SMOKE=1`-gated test; not
+  // in the production tsconfig project, so the type-aware lint
+  // rules would error on parse. Excluded for the same reason as spikes.
+  globalIgnores(['dist', 'spikes/**', 'benchmarks/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -20,6 +23,15 @@ export default defineConfig([
     ],
     languageOptions: {
       globals: globals.browser,
+      // Type-aware lint requires telling the parser where the project
+      // sits. `projectService: true` is the modern shape (TS-ESLint 8+);
+      // it auto-discovers the right tsconfig per file without forcing
+      // us to list them. Enables the three rules below + future
+      // type-aware checks. Slows lint ~3-5×; still fast enough for CI.
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       // eslint-plugin-react-hooks v6 added a strict rule against
@@ -32,6 +44,16 @@ export default defineConfig([
       // when a proper React 19 useReducer / use(promise) migration
       // lands.
       'react-hooks/set-state-in-effect': 'warn',
+      // Type-aware bug-class rules (slice 4 close-out, 2026-05-25):
+      // catch the "forgot to await", "Promise<void> passed as
+      // sync handler", and "awaiting non-thenable" classes that
+      // unit tests don't surface and Playwright would catch only
+      // by accident. These are the highest-signal rules in the
+      // type-aware bucket; the noisier no-unsafe-* family stays
+      // off until the codebase has a reason to need it.
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
     },
   },
   {

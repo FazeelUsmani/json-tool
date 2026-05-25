@@ -113,7 +113,11 @@ export function EditorToolbar({ error, setError }: Props) {
   const handleUrlSubmit = () => {
     const url = urlInput.trim();
     if (url === '' || loadingUrl !== null) return;
-    loadFromUrl(url);
+    // Fire-and-forget — errors surface via setError inside loadFromUrl.
+    // `void` operator silences no-floating-promises while keeping the
+    // call intentional (we deliberately do not block the keystroke
+    // handler on the fetch).
+    void loadFromUrl(url);
   };
 
   useEffect(() => {

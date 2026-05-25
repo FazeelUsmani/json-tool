@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from 'vitest';
 import { fetchUrl } from './fetchUrl';
 
-type FetchMock = ReturnType<typeof vi.fn>;
+// Typed to fetch's signature so mockImplementation accepts the
+// Promise<Response>-returning callbacks below — without the explicit
+// type parameter the strict-typed lint rule no-misused-promises fires
+// (default vi.fn return type is void).
+type FetchMock = Mock<typeof globalThis.fetch>;
 
 function makeResponse(
   body: BodyInit | null,
@@ -195,7 +199,8 @@ describe('fetchUrl', () => {
 
   test('times out after timeoutMs', async () => {
     vi.useFakeTimers();
-    (globalThis.fetch as FetchMock).mockImplementation((_url: string, init: RequestInit) => {
+    (globalThis.fetch as FetchMock).mockImplementation((_url, init) => {
+      if (!init) throw new Error('test: fetch called without init');
       return new Promise<Response>((_, reject) => {
         init.signal?.addEventListener('abort', () => {
           reject(new DOMException('aborted', 'AbortError'));
@@ -225,7 +230,8 @@ describe('fetchUrl', () => {
   });
 
   test('caller AbortSignal aborts mid-flight → network error', async () => {
-    (globalThis.fetch as FetchMock).mockImplementation((_url: string, init: RequestInit) => {
+    (globalThis.fetch as FetchMock).mockImplementation((_url, init) => {
+      if (!init) throw new Error('test: fetch called without init');
       return new Promise<Response>((_, reject) => {
         init.signal?.addEventListener('abort', () => {
           reject(new DOMException('aborted', 'AbortError'));

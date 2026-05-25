@@ -240,7 +240,9 @@ function TableBody({
             sortDisabled={sortDisabled}
             sortInFlight={sortInFlight}
             rowCount={rows.length}
-            onHeaderClick={handleHeaderClick}
+            onHeaderClick={(col) => {
+              void handleHeaderClick(col);
+            }}
           />
         </div>
       </div>

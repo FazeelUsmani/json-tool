@@ -123,7 +123,13 @@ export function MonacoPane() {
             setIsDragging(false);
           }
         }}
-        onDrop={handleDrop}
+        onDrop={(e) => {
+          // handleDrop is async (awaits file.text() on the small-file
+          // branch); React's onDrop expects a sync handler. The void
+          // wrap fires + ignores per no-misused-promises lint rule —
+          // errors are surfaced via setError inside handleDrop.
+          void handleDrop(e);
+        }}
       >
         {viewerOnly ? (
           <ViewerOnlyPlaceholder

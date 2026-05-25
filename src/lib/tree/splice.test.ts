@@ -9,7 +9,7 @@ function pathToId(path: string): string {
   if (path === '$') return '';
   return path
     .slice(1)
-    .replace(/\.([^.\[]+)/g, '/$1')
+    .replace(/\.([^.[]+)/g, '/$1')
     .replace(/\[(\d+)\]/g, '/$1');
 }
 function leaf(key: string | null, path: string, value: number): TreeNode {
