@@ -324,6 +324,18 @@ Target: **live public URL by Friday** with 4 deep SEO routes (not 8 thin ones).
 
 ---
 
+## Week 5 — Audit response (2026-05-25 onward)
+
+Off-plan correctness + production-gate work surfaced by `ENGINEERING_ASSESSMENT.md` (Mahira, 2026-05-22). Closes ship-blockers, not features. Punch list in `launch-readiness-gate.md`; per-commit detail in `CHANGELOG.md`.
+
+| Day | Shipped / planned |
+|---|---|
+| Mon (2026-05-25) | **All 5 audit-response slices + UX polish + post-review fixes in one push.** Slice 1: CI workflow (`1b5ff8f`) + Node pin (`c61df8e`) + lint cleanup. Slice 2: path-IDs identity refactor (`c6be7f8` → `520692c`, 6 phases + 12 pathological-key regression tests). Slice 3: `?url=` streaming + security (`a08133c`); native streaming-Blob fix after smoke caught a main-thread accumulation OOM at 200MB (`6781acd`). Slice 3.5: `?url=` pre-fill UX (`be7cf53`) + synchronous `<head>` strip before Plausible's deferred pageview (`ddbfeef`; first attempt had a React-useEffect ordering bug surfaced by post-slice-4 review). Slice 4: dompurify + qs advisories cleared via `package.json` `overrides`, CI audit-bar bumped from `--audit-level=high` to `moderate` (`131807b`). Critical bug fixes: TablePane sort comparator was peeking the row cache by stale `node.path` after Phase 3 — switched to `node.id` (`ddbfeef`). UX gaps closed: paste-to-empty handler (`eb33e40`), click-to-mount type-to-edit (`8c473cb`), RepairDialog DiffEditor unmount race silenced via `setModel(null)` before unmount (`94493de`). Process docs: CONTRIBUTING + CHANGELOG + shadcn vendor README (`3f43b57`); dead-code prune of `stream-json` + `@internal` tags on test-only helpers (`8685d63`). Gate-doc closures + identity-consistency polish entry (`86721f2`). **Hard-blocker status:** 5 of 6 closed (CI, path-IDs, `?url=` streaming, `?url=` security, dompurify); only branch-protection flip on `main` remains, which is a GitHub UI action. |
+| Tue | **Launch operational gates:** branch protection flip on `main` (GitHub side); production preview smoke per `launch-readiness-gate.md` Sign-off checklist; `?url=` smoke on a 200MB+ public URL. Brand decision (still pending, user-owned) — unblocks README rewrite + SEO route copy. |
+| Wed-Fri | **Remaining soft blockers per gate doc:** README rewrite (~1-2h, brand-blocked), Playwright e2e suite (~4-6h, must pin the two regressions caught in Mon's review per the gate doc), CSP tighten + HSTS + COOP + XFO + Trusted Types (~1-2h, deploy config), SEO route copy (brand-coupled). Customer calls + cold-email overlap data per the Parallel ops track. |
+
+---
+
 ## Parallel ops (running alongside build)
 
 | Track | When | Budget | What |
@@ -465,7 +477,7 @@ Binary checklist (no "mostly"):
 ### Quality
 
 - [ ] Lighthouse 90+ on `/`, `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`
-- [ ] CI green: `tsc && eslint && vitest && playwright smoke` *(local 2026-05-21: tsc -b clean, 158/158 vitest, prod build clean; no CI runner configured yet)*
+- [ ] CI green: `tsc && eslint && vitest && playwright smoke` *(2026-05-25: CI workflow shipped — `1b5ff8f` runs `npm ci` + typecheck + lint + test + build + `npm audit --audit-level=moderate` (slice-4 bump) on every push/PR. Tests up to 373/374 passing. **Playwright smoke still missing** — soft blocker per `launch-readiness-gate.md`; once it lands, must pin TablePane sort + `?url=` strip ordering regressions from the post-slice-4 review.)*
 - [ ] Repo flipped public on launch day
 
 **Verification commands:**

@@ -7,7 +7,7 @@ Sources:
 - This session's audit re-verification (2026-05-22 evening) — independently confirmed Mahira's `dompurify` finding
 - Existing `PLAN.MD` Month-1 verification list
 
-Last updated: **2026-05-22**.
+Last updated: **2026-05-25**.
 
 ---
 
