@@ -76,3 +76,25 @@ test('URL input is pre-filled with the original ?url= value after strip', async 
   const input = page.getByPlaceholder('Load from URL…');
   await expect(input).toHaveValue('https://example.com/some-data.json');
 });
+
+test('?url= happy path: pre-fill → press Enter → fetch + tree populates', async ({
+  page,
+}) => {
+  // Full URL-load flow end-to-end against a Playwright-mocked endpoint.
+  // The oversize / no-Content-Length cases are covered by fetchUrl
+  // unit tests; this spec covers the integrated load path.
+  const FIXTURE = '/__e2e_fixtures__/url-load.json';
+  await page.route(`**${FIXTURE}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ hello: 'from-url', items: [1, 2, 3] }),
+    });
+  });
+  await page.goto(`/?url=${encodeURIComponent(FIXTURE)}`);
+  await page.getByPlaceholder('Load from URL…').focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText('"hello"', { exact: false }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+});

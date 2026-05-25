@@ -1,6 +1,6 @@
 # Deploy: Cloudflare Pages
 
-Quickstart runbook for shipping `json-tool` to a Cloudflare Pages site under a brand domain. Mahira's assessment flagged "no deploy manifest/runbook" as a Production Readiness gap; this fills that gap.
+Quickstart runbook for shipping `json-tool` to a Cloudflare Pages site under a brand domain. The 2026-05-22 engineering assessment flagged "no deploy manifest/runbook" as a Production Readiness gap; this fills that gap.
 
 ## Prerequisites
 

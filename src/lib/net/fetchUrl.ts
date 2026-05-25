@@ -10,7 +10,7 @@
 //     fetch — no cookies, no token leaks via Referer
 //   - byte cap enforced DURING the body stream, not just on
 //     Content-Length. Servers that omit or lie about the header can no
-//     longer force unbounded materialization (Mahira §2 Red Flag #3)
+//     longer force unbounded materialization
 //   - allowlist application/json + JSON Lines variants + text/plain
 //   - 30s timeout (composable with caller AbortSignal)
 //   - HTTP errors mapped to typed result, not exceptions

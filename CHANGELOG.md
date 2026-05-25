@@ -1,7 +1,7 @@
 # Changelog
 
 Weekly cadence — shipped / measured / broken-or-found / deferred.
-Inaugural entry per Mahira's 2026-05-22 engineering assessment
+Inaugural entry per the 2026-05-22 engineering assessment
 (§1 Suggested Improvements #5). Format intentionally terse; the
 git log carries the per-commit detail.
 
@@ -43,7 +43,7 @@ git log carries the per-commit detail.
 - **Identity refactor** — TreeNode + parser + viewStore + splice + UI
   switched from JSONPath-as-id to RFC 6901 pointer ids. Display
   surfaces still read `node.path` so users see `$.events[42]`, not
-  `/events/42`. Closes Mahira's Red Flag #5.
+  `/events/42`. Closes the 2026-05-22 review's Red Flag #5.
 - **Pathological-keys regression fixture** — 12 cases proving keys
   with `.`, `[`, `]`, `/`, `~`, empty string produce distinct ids;
   pins the identity refactor.
@@ -54,12 +54,12 @@ git log carries the per-commit detail.
   rejects userinfo URLs, sets `credentials: 'omit'` +
   `referrerPolicy: 'no-referrer'`. EditorToolbar mirrors the
   file-drop dispatch so 500MB URL loads behave the same as 500MB
-  drops. Closes Mahira Red Flags #2 + #3.
+  drops. Closes the 2026-05-22 review's Red Flags #2 + #3.
 - **`?url=` auto-fetch removed** (slice 3.5) — `?url=` now pre-fills
   the URL input instead of auto-firing the fetch; user clicks Load to
   trigger. `history.replaceState` strips the param from
   `window.location` on mount so Plausible's auto-pageview can't
-  capture it. Closes Mahira §5 weakness 2 (auto-load leaks signed
+  capture it. Closes the 2026-05-22 review's §5 weakness 2 (auto-load leaks signed
   URLs to history / analytics / referrer).
 - **dompurify advisory cleared via `overrides`** (slice 4) —
   `package.json` `overrides` forces Monaco's transitive `dompurify`
@@ -70,7 +70,7 @@ git log carries the per-commit detail.
   `--audit-level=high` to `--audit-level=moderate`. Monaco itself
   untouched (no forward upgrade exists — `next` channel still
   bundles dompurify `3.2.7`). Rationale + revert conditions in
-  `docs/dependency-overrides.md`. Closes Mahira §5 Red Flag.
+  `docs/dependency-overrides.md`. Closes the 2026-05-22 review's §5 Red Flag.
 - **RepairDialog DiffEditor unmount race** — `setModel(null)` on
   apply/cancel before React unmounts the dialog clears Monaco's
   widget model pointer ahead of the TextModel disposal, silencing
@@ -90,9 +90,25 @@ git log carries the per-commit detail.
   `regressions/` for the TablePane peek-by-`node.path` and `?url=`
   Plausible-ordering bugs caught earlier today. CI wired as on-demand
   workflow (`.github/workflows/e2e.yml`, `workflow_dispatch` only)
-  with Playwright browser-cache keyed on `package-lock.json`. Full
-  Mahira §4 e2e surface (file drop, viewer-only, search, repair,
-  schema, SEO, PWA) is the follow-up slice — gate doc updated.
+  with Playwright browser-cache keyed on `package-lock.json`.
+- **Playwright surface fill** — added five more specs covering the
+  remaining e2e gaps from the 2026-05-22 review §4: `drag-drop.spec.ts`
+  (#1: small file drop + viewer-only pivot at 10MB), `repair-dialog
+  .spec.ts` (#3: Apply / Cancel + DiffEditor unmount-race assertion
+  via `page.on('pageerror')`), `schema-tab.spec.ts` (#4: first-click
+  infer + stale dot on edit), `tree-keyboard-nav.spec.ts` (#6:
+  arrow nav + Escape clears search), `pwa-ssg.spec.ts` (#8: each
+  SEO route renders pre-hydration with JS disabled, sw.js +
+  manifest served). The `url-strip-ordering` spec also gained a
+  happy-path case for #2. Pending bits flagged in gate doc:
+  search-keystroke flow, stub-expand cancel mid-flight, full PWA
+  offline behavior (Playwright's SW timing is brittle).
+- **Worker boundary tests** — `parser.worker.test.ts` exercises
+  `searchStubs` via the exported `api` const (Comlink mocked at
+  module load): match-and-batch, empty short-circuits, case-
+  insensitive matching, abort-mid-flight short-circuits the
+  terminal tick. 5 cases. Closes the 2026-05-22 review's §4 weakness 4 (worker
+  boundary under-tested).
 
 ### Measured
 

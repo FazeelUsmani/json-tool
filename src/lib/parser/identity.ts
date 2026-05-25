@@ -17,9 +17,8 @@
 // display. That collapsed `{"a.b": 1}` and `{a: {b: 1}}` into the
 // same `$.a.b` string — every Set / WeakMap that keyed off path
 // would conflate them, breaking collapse state, search match
-// dedup, splice targeting, and cache lookups. Mahira's 2026-05-22
-// review (§2 Red Flag #5) flagged this; the parallel-fields design
-// fixes the correctness gap without changing what users see.
+// dedup, splice targeting, and cache lookups. The parallel-fields
+// design fixes the correctness gap without changing what users see.
 //
 // Root: id = "" (RFC 6901 root), path = "$" (JSONPath root).
 //

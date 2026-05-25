@@ -7,7 +7,7 @@
 //
 // Scope is deliberately small: smoke happy-path + the two regressions
 // caught manually on 2026-05-25 (TablePane peek-by-id, ?url= synchronous
-// strip before Plausible). The full Mahira surface (drop / repair / schema
+// strip before Plausible). The fuller surface (drop / repair / schema
 // / viewer-only / SEO routes / PWA) is queued as a separate slice; see
 // launch-readiness-gate.md "Playwright e2e smoke" entry.
 //

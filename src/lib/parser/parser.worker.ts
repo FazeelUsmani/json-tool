@@ -18,7 +18,11 @@ let abortFlag: { aborted: boolean } = { aborted: false };
 // expandStub. Recreated per searchStubs call.
 let searchAbortFlag: { aborted: boolean } = { aborted: false };
 
-const api = {
+// Exported so vitest can exercise the worker boundary methods
+// (searchStubs batching, abort wiring) without spinning up a real
+// Worker. The Comlink.expose() call below is the production
+// integration; tests mock Comlink and call api.* directly.
+export const api = {
   // Accepts any Blob (which includes File). Text input synthesizes a Blob
   // via `new Blob([text])` on the main side; drag-dropped files arrive as
   // File. Both round-trip through Comlink's structured clone and expose

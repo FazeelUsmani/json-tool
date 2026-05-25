@@ -121,9 +121,11 @@ export function EditorToolbar({ error, setError }: Props) {
   };
 
   useEffect(() => {
-    // `?url=` is a pre-fill convenience, not auto-load (Mahira §5 #3).
-    // Synchronous strip lives in index.html's inline <head> script
-    // (runs before Plausible's pageview); value lives on
+    // `?url=` is a pre-fill convenience, not auto-load — the user
+    // clicks Load to fire the fetch so destination servers receive
+    // a request only on explicit intent. Synchronous strip lives in
+    // index.html's inline <head> script (runs before Plausible's
+    // pageview); the param value gets stashed on
     // document.documentElement.dataset.pendingUrl for us to consume.
     // Delete after read so HMR/remount doesn't re-prefill stale content.
     const pendingUrl = document.documentElement.dataset.pendingUrl;

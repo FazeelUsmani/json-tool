@@ -1,7 +1,5 @@
 // Cold-load happy-path canary. Catches the "did we break the
-// editor-mounts-and-parses?" class of regression. Not exhaustive — the
-// fuller Mahira surface (drop / repair / schema / viewer-only / SEO
-// routes) is queued separately; see launch-readiness-gate.md.
+// editor-mounts-and-parses?" class of regression.
 
 import { test, expect } from '@playwright/test';
 

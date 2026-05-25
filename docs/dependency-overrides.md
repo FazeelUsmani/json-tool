@@ -55,7 +55,7 @@ breaks in practice, the fallback is the Monaco 0.53 downgrade path
 (slice 4 Option B in the original design sketch).
 
 **References:**
-- Mahira's 2026-05-22 engineering assessment, §5 Red Flag + Suggested
+- The 2026-05-22 engineering assessment, §5 Red Flag + Suggested
   Improvement #7
 - npm advisory database: [GHSA-v2wj-7wpq-c8vv](https://github.com/advisories/GHSA-v2wj-7wpq-c8vv) and related
 - `CHANGELOG.md` 2026-05-25 entry
