@@ -37,7 +37,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 ### Dependencies
 
-- [ ] **`dompurify` moderate vulnerabilities (transitive via Monaco)** — re-verified 2026-05-22 evening via `npm audit`: 8 advisories, all moderate severity (XSS, prototype pollution, template bypass). `npm audit fix --force` downgrades Monaco to 0.53.0 which is a breaking change. Plan: upgrade Monaco in a separate slice with browser smoke tests (JSON editing, diff editor in RepairDialog). **~2-4 hours including testing.** (Mahira §5 Red Flag, Top 10 #N/A but explicit finding)
+- [x] **`dompurify` moderate vulnerabilities (transitive via Monaco)** — closed 2026-05-25 (slice 4). `package.json` `overrides` forces Monaco's transitive `dompurify` to `^3.4.5` (above all known advisory ranges); the same field overrides `qs` to `^6.15.2` (transient via shadcn → @modelcontextprotocol/sdk → express). `npm audit` returns 0 vulnerabilities; CI gate raised from `--audit-level=high` to `--audit-level=moderate`. Rationale + revert conditions in `docs/dependency-overrides.md`. Monaco itself untouched (forward upstream upgrade had no version available — `0.56.0-dev-*` still pulls dompurify `3.2.7`). Browser smoke verified hover renders + script-injection paste shows as escaped text + RepairDialog DiffEditor mounts. (Mahira §5 Red Flag)
 
 ---
 
@@ -80,6 +80,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 - [ ] **TreeView orchestration extraction** — parse dispatch, NDJSON detection, search orchestration, keyboard wiring all in one 500-line file.
 - [ ] **NDJSON indexing in worker** — currently main-thread (~200ms allocation + ~100ms scan on 200MB). Acceptable today; worker offload deferred.
 - [ ] **Incremental / segmented flatten** — `FlatRow[]` is rebuilt on every parse + every stub expand. Largest measured case (2.25M rows at 505MB) still works; defer until profiling shows a regression. Worth tracking so a future fixture doesn't surprise us. (Mahira §2 Suggested Improvement #6)
+- [ ] **Remove dompurify override** — currently forced to `^3.4.5` via `package.json` `overrides` (slice 4 close-out, 2026-05-25). Drop the override when Monaco ships a stable release bundling `dompurify >= 3.4.0` upstream. Track via `npm view monaco-editor dependencies` periodically; see `docs/dependency-overrides.md` for the full revert checklist. (Same applies to the `qs ^6.15.2` override — drop once shadcn / express bump their pins.)
 - [ ] **Large-file splits**: TreeNode (566), parse-streaming (538), TreeView (501), TablePane (478). (Mahira §2 weakness, §3 weakness 1)
 
 ### Code-reuse cleanup

@@ -61,6 +61,22 @@ git log carries the per-commit detail.
   `window.location` on mount so Plausible's auto-pageview can't
   capture it. Closes Mahira §5 weakness 2 (auto-load leaks signed
   URLs to history / analytics / referrer).
+- **dompurify advisory cleared via `overrides`** (slice 4) —
+  `package.json` `overrides` forces Monaco's transitive `dompurify`
+  to `^3.4.5` (above all known XSS / prototype-pollution / template-
+  bypass advisory ranges). Same override field clears a transient
+  `qs` DoS advisory (shadcn → express → qs `6.15.1` → `^6.15.2`).
+  `npm audit` returns 0 vulnerabilities; CI audit gate raised from
+  `--audit-level=high` to `--audit-level=moderate`. Monaco itself
+  untouched (no forward upgrade exists — `next` channel still
+  bundles dompurify `3.2.7`). Rationale + revert conditions in
+  `docs/dependency-overrides.md`. Closes Mahira §5 Red Flag.
+- **RepairDialog DiffEditor unmount race** — `setModel(null)` on
+  apply/cancel before React unmounts the dialog clears Monaco's
+  widget model pointer ahead of the TextModel disposal, silencing
+  the `TextModel got disposed before DiffEditorWidget model got
+  reset` console error that fired on every close cycle. Pre-existing
+  bug surfaced during slice 4 browser smoke.
 
 ### Measured
 
@@ -96,7 +112,9 @@ git log carries the per-commit detail.
 
 ### Deferred
 
-- Monaco / dompurify breaking upgrade (audit slice 4, ~2-4h).
+- Remove dompurify + qs overrides once upstream pins land (see
+  `docs/dependency-overrides.md` for revert conditions; tracked in
+  `launch-readiness-gate.md` polish section).
 - Branch protection flip on `main` (your GitHub-side action).
 - README rewrite — currently default Vite boilerplate (~1-2h).
 - Playwright e2e smoke + component-level UI tests (~4-6h + half-day).

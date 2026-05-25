@@ -43,9 +43,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Audit at "high" — known moderate dompurify advisories transit
-      # via Monaco. Bump to --audit-level=moderate once the Monaco
-      # breaking upgrade lands (tracked separately as audit-response
-      # slice 5 in launch-readiness-gate.md).
+      # Audit at "moderate" — slice-4 closure (2026-05-25). The
+      # dompurify + qs advisories that previously sat above this bar
+      # are cleared via the package.json `overrides` field (see
+      # docs/dependency-overrides.md). Raising the gate locks the win
+      # in: any future moderate advisory across the dep tree surfaces
+      # in CI rather than silently sliding in.
       - name: Audit
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate
