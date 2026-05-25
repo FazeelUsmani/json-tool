@@ -1,0 +1,14 @@
+{
+  "a.b": 1,
+  "a": { "b": 2 },
+  "[0]": 3,
+  "arr": [3.5, "second"],
+  "": 4,
+  "~with~tildes": 5,
+  "has/slash": 6,
+  "~contains/slash": 7,
+  "with space": 8,
+  "1starting-digit": 9,
+  "café": 10,
+  "has\"quote": 11
+}
