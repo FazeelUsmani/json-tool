@@ -1,9 +1,18 @@
-// W3-Wed Part A re-smoke. Drives parseStreaming against the 200MB
-// telemetry fixture and reports parse wall, RSS, flatten wall, byteIndex
-// size. Skipped unless SMOKE=1 — opt in explicitly for ad-hoc cold runs:
-//   SMOKE=1 pnpm exec vitest run benchmarks/smoke-200mb.test.ts
+// 200MB telemetry fixture smoke. Drives parseStreaming + flattenTree
+// and asserts CATASTROPHIC-tolerance thresholds:
+//   - parseMs < 60000   (typical 5-6s; cap catches 10x regressions)
+//   - flattenMs < 30000 (typical 100-300ms; cap catches 100x regressions)
+//   - rssAfterParse < 4000MB (typical ~300MB; cap catches OOM-territory)
+//
+// Wide thresholds are deliberate — GitHub-hosted runners share CPU and
+// can vary 2-3x on identical workloads. We only catch egregious
+// regressions automatically; subtle 2x slowdowns still surface via the
+// methodology.md manual workflow. Skipped unless SMOKE=1 because the
+// fixture is gitignored (200MB); CI generates it via the perf workflow.
+//
+//   SMOKE=1 npm test -- --run benchmarks/smoke-200mb.test.ts
 
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
@@ -81,6 +90,20 @@ test.skipIf(!process.env.SMOKE)('200MB smoke', async () => {
         2,
       ),
   );
+
+  // Catastrophic-tolerance perf gate — see header comment for
+  // threshold rationale. These assertions only fail on egregious
+  // regressions (parse takes a minute, OOM-territory RSS growth);
+  // subtle slowdowns continue to need the manual benchmark
+  // workflow (methodology.md).
+  expect(parseMs, `parseMs ${Math.round(parseMs)} > 60_000ms threshold`).toBeLessThan(60_000);
+  expect(flattenMs, `flattenMs ${Math.round(flattenMs)} > 30_000ms threshold`).toBeLessThan(30_000);
+  expect(
+    mb(rssAfterParse),
+    `rssAfterParse ${mb(rssAfterParse)}MB > 4000MB threshold`,
+  ).toBeLessThan(4000);
+  expect(rows.length, 'flat rows should be populated').toBeGreaterThan(100_000);
+  expect(result.parseError, 'parse should not error').toBeUndefined();
 
   // Top-20-visible-rows snapshot. Approximates the on-screen layout of
   // OpenRow / StubRow / LeafRow / CloseRow at default zoom. Object keys

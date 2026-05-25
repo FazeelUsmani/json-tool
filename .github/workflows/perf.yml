@@ -1,0 +1,56 @@
+# On-demand perf-regression gate. Runs the 200MB SMOKE=1 test against a
+# freshly-generated fixture and fails on catastrophic-tolerance threshold
+# breaches (parseMs > 60s, flattenMs > 30s, rssAfterParse > 4GB, parse
+# error, empty flat rows).
+#
+# Manual trigger only (workflow_dispatch) because GitHub-hosted runner
+# CPU variance makes naive perf assertions flaky on push/PR. Wide
+# thresholds deliberately catch only egregious regressions; subtle
+# slowdowns still require the methodology.md manual workflow.
+#
+# Promote to schedule-based (weekly nightly) once stable. Promote to
+# on-PR only with self-hosted runners + percentile bands.
+
+name: Perf (on-demand)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate 200MB telemetry fixture
+        # Same shape + size as benchmarks/corpus/telemetry-900000.json
+        # (the smoke test's default FIXTURE path).
+        run: node benchmarks/generate.mjs --shape telemetry --size 900000
+
+      - name: Run SMOKE=1 perf gate
+        env:
+          SMOKE: '1'
+        run: npm test -- --run benchmarks/smoke-200mb.test.ts
+
+      - name: Upload smoke output
+        # Captures the SMOKE JSON + top-20-rows snapshot from vitest's
+        # stdout so deltas can be reviewed in the run logs even when
+        # thresholds are not breached.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-200mb-output
+          path: |
+            **/test-output*.log
+          retention-days: 30
+          if-no-files-found: ignore

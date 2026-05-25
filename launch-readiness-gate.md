@@ -117,6 +117,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 ### Telemetry / logging
 
 - [ ] **Production console logs** — `[parser] parseFile` / `[parser] setFlat` / `[worker] setFlat stored` etc. should be gated by `?debug=1` or a build flag. Currently always-on. (2026-05-22 review §3 weakness 4)
+- [x] **Automated perf regression gate** — closed 2026-05-25. `benchmarks/smoke-200mb.test.ts` now asserts catastrophic-tolerance thresholds (parseMs < 60s, flattenMs < 30s, rssAfterParse < 4GB, parse-error undefined, flat rows > 100k). On-demand CI workflow `.github/workflows/perf.yml` generates the 200MB fixture + runs `SMOKE=1`. Wide tolerances deliberately catch only egregious regressions; subtle slowdowns still need the methodology.md manual workflow because GitHub-hosted runner CPU variance defeats tighter thresholds. Promote to weekly schedule or self-hosted runners once stable. (2026-05-22 review §4 Red Flag #3)
 
 ### Deferred features
 
