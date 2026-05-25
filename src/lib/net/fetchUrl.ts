@@ -185,41 +185,63 @@ export async function fetchUrl(
     };
   }
 
-  // (6) Stream the body, accumulating chunks into a Blob and enforcing
-  // the byte cap during read. The cap is checked on each chunk so a
-  // chunked / lying-Content-Length response cannot force unbounded
-  // memory growth (Mahira §2 Red Flag #3). On overflow we cancel the
-  // reader (releases the underlying stream) and return too-large with
-  // the byte count we got to before bailing.
+  // (6) Pipe the body through a byte-cap TransformStream into a
+  // natively-constructed Blob. The first iteration of this code
+  // accumulated chunks in a JS array (`chunks: Uint8Array[]`) and then
+  // constructed `new Blob(chunks, ...)` — that peaked at full-body
+  // size on the V8 heap (~200MB for the 200MB smoke fixture) and
+  // crashed Chrome's tab via OOM before the parser worker ever saw
+  // the Blob.
+  //
+  // The current shape uses `new Response(stream).blob()`, which is
+  // the platform's native streaming Blob construction — the browser
+  // writes chunks straight into Blob storage (often disk-backed) and
+  // never buffers the full body in V8 memory. The TransformStream
+  // sandwiched in between counts bytes per chunk; on overflow it
+  // calls `controller.error(...)`, which rejects the awaited
+  // `.blob()` promise with a typed error we surface as `too-large`.
   if (response.body === null) {
     // Shouldn't happen for a real fetch — defensive for edge runtimes.
     clearTimeout(timeoutHandle);
     return { ok: false, error: { kind: 'network', cause: 'no body' } };
   }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
+
+  // `capState` is the closure-scoped signal carrying cap detection out
+  // of the TransformStream. Chrome wraps stream errors before they
+  // reach `await Response.blob()` — `instanceof` on a custom Error
+  // class doesn't survive that boundary (the catch sees a DOMException
+  // with cause unset). Tests in node/jsdom pass through the original
+  // class cleanly which masked the issue until the 2026-05-25 browser
+  // smoke. The flag is local to this scope so propagation is moot.
+  const capState = { exceeded: false, totalBytes: 0 };
+
+  let blob: Blob;
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        // Release the underlying stream. We don't await — at this point
-        // the result is decided; letting cancel run in the background is
-        // fine and avoids a second await-roundtrip.
-        void reader.cancel();
-        clearTimeout(timeoutHandle);
-        return {
-          ok: false,
-          error: { kind: 'too-large', contentLength: totalBytes, max: maxBytes },
-        };
-      }
-      chunks.push(value);
-    }
+    const limitedStream = response.body.pipeThrough(
+      makeByteCapTransform(maxBytes, capState),
+    );
+    // Pass the server's Content-Type through so blob.type reads
+    // cleanly downstream. ResponseInit only takes a header bag when
+    // we have one to pass.
+    const init: ResponseInit = contentTypeHeader
+      ? { headers: { 'content-type': contentTypeHeader } }
+      : {};
+    blob = await new Response(limitedStream, init).blob();
   } catch (err) {
     clearTimeout(timeoutHandle);
+    // Cap detection first — the flag is set BEFORE controller.error,
+    // so it's true whether or not the original error class survived
+    // the stream-error wrapping.
+    if (capState.exceeded) {
+      return {
+        ok: false,
+        error: {
+          kind: 'too-large',
+          contentLength: capState.totalBytes,
+          max: maxBytes,
+        },
+      };
+    }
     if (timedOut) {
       return { ok: false, error: { kind: 'timeout', afterMs: timeoutMs } };
     }
@@ -228,25 +250,43 @@ export async function fetchUrl(
 
   clearTimeout(timeoutHandle);
 
-  // Construct the Blob from the accumulated chunks. Type is the server's
-  // Content-Type so downstream `blob.type` reads cleanly; if absent we
-  // leave it empty (matches new Blob() default). Cast through BlobPart[]
-  // because TS strictness flags Uint8Array<ArrayBufferLike> vs the Blob
-  // ctor's narrower Uint8Array<ArrayBuffer> expectation — runtime is fine.
-  const blob = new Blob(
-    chunks as unknown as BlobPart[],
-    contentTypeHeader ? { type: contentTypeHeader } : {},
-  );
-
   return {
     ok: true,
     blob,
     contentType: contentTypeHeader,
     finalUrl: response.url || url,
-    // True byte count from the stream — no more TextEncoder fallback or
-    // Content-Length trust.
-    bytes: totalBytes,
+    // True byte count from the resulting Blob — no Content-Length
+    // trust, no TextEncoder fallback, no main-thread accumulation.
+    bytes: blob.size,
   };
+}
+
+type CapState = { exceeded: boolean; totalBytes: number };
+
+// Counts bytes per chunk and aborts the pipe the moment the running
+// total crosses `maxBytes`. The transform passes chunks through
+// unchanged under cap, so the native Blob construction downstream
+// never sees per-chunk JS-heap retention. On overflow it both errors
+// the controller (terminates the readable side, which rejects the
+// awaited `.blob()`) AND writes the cap state into the caller's
+// closure (`state.exceeded = true`) — the closure flag is the
+// reliable signal because Chrome wraps stream errors before they
+// reach the .blob() catch.
+function makeByteCapTransform(
+  maxBytes: number,
+  state: CapState,
+): TransformStream<Uint8Array, Uint8Array> {
+  return new TransformStream({
+    transform(chunk, controller) {
+      state.totalBytes += chunk.byteLength;
+      if (state.totalBytes > maxBytes) {
+        state.exceeded = true;
+        controller.error(new Error('byte cap exceeded'));
+        return;
+      }
+      controller.enqueue(chunk);
+    },
+  });
 }
 
 function combineSignals(signals: AbortSignal[]): AbortSignal {
