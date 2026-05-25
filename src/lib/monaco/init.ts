@@ -38,6 +38,54 @@ export function initMonaco(): void {
       if (label === 'json') return new JsonWorker();
       return new EditorWorker();
     },
+    // Trusted Types policy hook (2026-05-25). When the page's CSP
+    // includes `require-trusted-types-for 'script'`, the browser
+    // refuses to set `innerHTML` (and similar sinks) with a plain
+    // string — the value must be a TrustedHTML produced by a
+    // registered policy. Monaco uses `innerHTML` internally for its
+    // editor, diff editor, hover widgets, and suggestion list; this
+    // hook routes Monaco's policy requests through the browser's
+    // TrustedTypes API so the editor doesn't throw on every render.
+    //
+    // The policies are pass-through (no sanitization) because Monaco
+    // owns the HTML it generates — none of it derives from
+    // user-supplied JSON values (those render as plain text in the
+    // editor + as text content in the tree pane). The security
+    // guarantee comes from the CSP itself: `require-trusted-types-for`
+    // catches accidental `innerHTML` writes ANYWHERE ELSE in our app
+    // or in transitively-loaded code that doesn't register a policy.
+    //
+    // CSP allowlist lives in public/_headers (`trusted-types`
+    // directive). Add new policy names there whenever Monaco bumps
+    // its internal policy list.
+    createTrustedTypesPolicy(name, options) {
+      // window.trustedTypes is a newer Web API not yet in the
+      // default lib.dom typings shipping with our TS version.
+      // Cast through unknown to access it without polluting the
+      // global Window type. Returns undefined in browsers that
+      // don't support Trusted Types — Monaco then falls back to
+      // its non-trusted code path.
+      const tt = (window as unknown as {
+        trustedTypes?: {
+          createPolicy(name: string, policy: unknown): unknown;
+        };
+      }).trustedTypes;
+      if (!tt) return undefined;
+      try {
+        // Cast both ways: Monaco's ITrustedTypePolicy structurally
+        // matches the browser's TrustedTypePolicy.
+        return tt.createPolicy(name, options) as ReturnType<
+          NonNullable<NonNullable<typeof self.MonacoEnvironment>['createTrustedTypesPolicy']>
+        >;
+      } catch {
+        // Policy may already be registered (HMR / re-init / duplicate
+        // creation under the same name). Browser throws TypeError in
+        // that case; returning undefined makes Monaco fall back to
+        // its non-trusted path — which is fine because the existing
+        // policy is still active for this name.
+        return undefined;
+      }
+    },
   };
 
   loader.config({ monaco });

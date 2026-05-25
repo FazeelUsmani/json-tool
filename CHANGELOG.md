@@ -148,19 +148,25 @@ git log carries the per-commit detail.
   `Cross-Origin-Resource-Policy: same-origin` added; HSTS bumped
   1yr → 2yr for HSTS-preload eligibility; CSP `report-uri
   /csp-report` placeholder added (endpoint activates at
-  brand-domain cutover). Trusted Types deferred — `innerHTML` use
-  inside Monaco needs a `TrustedTypePolicy` wired before
-  `require-trusted-types-for 'script'` can be enabled without
-  breaking the editor.
+  brand-domain cutover).
+- **Trusted Types wired (pending browser smoke before trust)** —
+  `MonacoEnvironment.createTrustedTypesPolicy` hook in
+  `src/lib/monaco/init.ts` routes Monaco's policy requests through
+  `window.trustedTypes`; CSP `trusted-types` directive allowlists
+  the 10 policy names Monaco creates internally (enumerated from
+  the bundled source) + `dompurify` + `'allow-duplicates'`;
+  `require-trusted-types-for 'script'` enforced. **Vitest can't
+  catch Trusted Types violations** — only browser execution does.
+  Validate via the launch-gate smoke checklist before considering
+  prod-safe. Typical failure: `innerHTML` throws → blank component
+  or React error overlay; fix is to extend the policy allowlist
+  or revert the enforcement directive.
 
 ### Deferred
 
 - Remove dompurify + qs overrides once upstream pins land (see
   `docs/dependency-overrides.md` for revert conditions; tracked in
   `launch-readiness-gate.md` polish section).
-- Trusted Types CSP directive — needs Monaco TrustedTypePolicy
-  registration + browser smoke verifying editor / RepairDialog /
-  viewer-only fallback all survive the policy enforcement.
 - Branch protection flip on `main` (your GitHub-side action).
 - README rewrite — currently default Vite boilerplate (~1-2h).
 - Playwright e2e smoke + component-level UI tests (~4-6h + half-day).
