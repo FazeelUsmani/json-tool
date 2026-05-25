@@ -142,11 +142,25 @@ git log carries the per-commit detail.
 - **Hydration mismatch + INP regression** — caught during W4-Mon
   HUD work, both fixed (`feu` defer, search-to-worker move).
 
+- **Security headers tighten** — `public/_headers` `connect-src`
+  narrowed from `'self' https:` to `'self' https://plausible.io`
+  (locks XSS exfil to the one analytics endpoint);
+  `Cross-Origin-Resource-Policy: same-origin` added; HSTS bumped
+  1yr → 2yr for HSTS-preload eligibility; CSP `report-uri
+  /csp-report` placeholder added (endpoint activates at
+  brand-domain cutover). Trusted Types deferred — `innerHTML` use
+  inside Monaco needs a `TrustedTypePolicy` wired before
+  `require-trusted-types-for 'script'` can be enabled without
+  breaking the editor.
+
 ### Deferred
 
 - Remove dompurify + qs overrides once upstream pins land (see
   `docs/dependency-overrides.md` for revert conditions; tracked in
   `launch-readiness-gate.md` polish section).
+- Trusted Types CSP directive — needs Monaco TrustedTypePolicy
+  registration + browser smoke verifying editor / RepairDialog /
+  viewer-only fallback all survive the policy enforcement.
 - Branch protection flip on `main` (your GitHub-side action).
 - README rewrite — currently default Vite boilerplate (~1-2h).
 - Playwright e2e smoke + component-level UI tests (~4-6h + half-day).

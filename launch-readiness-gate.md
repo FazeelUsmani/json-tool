@@ -72,7 +72,13 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 ### Security headers
 
-- [ ] **CSP tighten + HSTS + COOP + XFO + Trusted Types** — `public/_headers` exists but is minimal. Lighthouse Best Practices 77 → ~95 expected after this. Deploy-config, not code. **~1-2 hours including verification.** (2026-05-22 review §5 weakness 5-6)
+- [~] **CSP tighten + HSTS + COOP + XFO** — mostly closed 2026-05-25. `public/_headers`:
+  - `connect-src` tightened from `'self' https:` to `'self' https://plausible.io` — locks XSS exfil destinations to the one analytics endpoint.
+  - `Cross-Origin-Resource-Policy: same-origin` added (was missing).
+  - HSTS `max-age` bumped 1yr → 2yr (63072000) to qualify for HSTS preload submission.
+  - CSP `report-uri /csp-report` directive added as placeholder — endpoint goes live at brand-domain cutover.
+  - Already had: HSTS, COOP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, script-src-attr 'none', Permissions-Policy, frame-ancestors 'none', base-uri 'self', form-action 'self', object-src 'none', upgrade-insecure-requests.
+  - **Trusted Types deferred** (separate slice): the `require-trusted-types-for 'script'` directive enforces a TrustedTypePolicy on every `innerHTML`-shaped assignment. Monaco's editor internals use `innerHTML` directly; turning Trusted Types on without registering a permissive policy for Monaco breaks the editor. Needs its own slice with policy wiring + browser smoke (editor, RepairDialog, viewer-only fallback). (2026-05-22 review §5 weakness 5-6)
 - [ ] **CSP reporting endpoint** — for post-launch monitoring of XSS attempts.
 
 ### Customer / validation
