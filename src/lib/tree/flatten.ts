@@ -159,9 +159,15 @@ function walk(
   });
 }
 
+// @internal — test fixture helper. Production visibility derivation runs
+// through `useVisibleRows.ts` (which composes closed + query into a
+// react-window-friendly index list). This pure helper exists for unit
+// tests asserting the closed-set propagation invariant without React.
+// No `src/` code imports it outside `*.test.ts`.
+//
 // Returns the subset of rows whose parent chain has no closed composite.
-// O(N × avgDepth) per call — fine through W2; if W2-Fri profiling shows it
-// as the bottleneck the fix is an incrementally-maintained visible-set
+// O(N × avgDepth) per call — fine through W2; if W2-Fri profiling shows
+// it as the bottleneck the fix is an incrementally-maintained visible-set
 // updated on toggle. Don't pre-optimize.
 export function deriveVisible(
   flat: FlatRow[],

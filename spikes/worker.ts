@@ -4,7 +4,11 @@
 // parser. Skeleton intentionally short — replace string-search-based offset
 // recovery with a parser-native approach once we know which library to ship.
 
-type ParserKind = 'streamparser' | 'streamjson';
+// stream-json branch removed 2026-05-25 — @streamparser/json won the
+// day-1 spike + the unused dep was pruned. The kind enum is kept for
+// historical clarity in case anyone wants to re-introduce alternative
+// parsers later.
+type ParserKind = 'streamparser';
 type RunBuiltin = { type: 'run-builtin'; parser: ParserKind };
 type RunFile = { type: 'run-file'; parser: ParserKind; file: File };
 type Msg = RunBuiltin | RunFile;
@@ -56,9 +60,10 @@ async function runOne(parser: ParserKind, label: string, bytes: Uint8Array) {
   // (a) Bundling — if the dynamic import below resolves, the bundler is happy.
   let result: CaptureResult;
   try {
-    result = parser === 'streamparser'
-      ? await captureWithStreamparser(bytes)
-      : await captureWithStreamJson(bytes);
+    // Only @streamparser/json remains since the day-1 decision. Switch
+    // is kept as a single-arm match for future-extension clarity.
+    if (parser !== 'streamparser') throw new Error(`unknown parser: ${parser}`);
+    result = await captureWithStreamparser(bytes);
   } catch (err) {
     emit(`${label} — (a)/(b) parser failed`, 'fail', String((err as Error).stack ?? err));
     return;
@@ -191,24 +196,6 @@ async function captureWithStreamparser(bytes: Uint8Array): Promise<CaptureResult
   // try/catch that distinguishes the two cases.
   parser.write(bytes);
   return { offsets, misses, fired };
-}
-
-// ---------------------------------------------------------------------------
-// stream-json — placeholder. The spike's primary question for this branch is
-// whether the library bundles cleanly inside a Vite ES-module worker; per
-// PLAN.MD `optimizeDeps.exclude: ['stream-json']` is already set in
-// vite.config.ts. Fill in offset capture below if (a) passes here.
-//
-async function captureWithStreamJson(_bytes: Uint8Array): Promise<CaptureResult> {
-  // Attempt the import — that alone answers (a).
-  const lib = await import('stream-json');
-  if (!lib) throw new Error('stream-json import returned empty');
-  throw new Error(
-    'stream-json offset capture not yet wired. ' +
-      'Import succeeded (so (a) passes for this parser). ' +
-      'Decide before EOD whether to invest in a Tokenizer-based offset scheme ' +
-      'or commit to @streamparser/json (which exposes per-token offsets natively).',
-  );
 }
 
 function emit(caseId: string, status: 'pass' | 'fail', details: string) {

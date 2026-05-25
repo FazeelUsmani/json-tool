@@ -68,9 +68,6 @@ export default defineConfig(({ isSsrBuild }) => ({
   worker: {
     format: 'es',
   },
-  optimizeDeps: {
-    exclude: ['stream-json'],
-  },
   build: {
     rollupOptions: {
       output: {

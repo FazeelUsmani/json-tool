@@ -78,6 +78,11 @@ export type ParseTreeError = {
   col?: number;
 };
 
+// @internal — test fixture helper. The production parse pipeline routes
+// through `parse-streaming.ts` (worker + spine + stubs); this sync
+// helper exists only so unit tests can build TreeNodes from a JSON
+// string without spinning up the worker. No `src/` code imports it
+// outside `*.test.ts`. Kept exported because the test files reach in.
 export function parseToTree(text: string): ParseTreeResult {
   if (text.trim() === '') {
     return { ok: false, error: { message: 'Empty input' } };
