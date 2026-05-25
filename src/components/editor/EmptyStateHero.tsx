@@ -20,6 +20,16 @@
 // unmounts, the listener is removed, and Monaco's own paste handler
 // takes over.
 //
+// Click-to-mount (Option A, 2026-05-25): clicking the hero background
+// fires `onActivate`, which signals MonacoPane to skip the hero and
+// mount Monaco with empty content. The user can then type. Without
+// this, "click into the editor to type" — the universal mental model
+// across CodeSandbox / StackBlitz / GitHub web — was broken: clicking
+// did nothing because the click target wasn't backed by an input.
+// Sample-button clicks bubble through to `onActivate` as well, which
+// is harmless because their own onClick fires setText first and
+// drives the same outcome (Monaco mount) via documentStore.
+//
 // Sample buttons load inline JS-string content via setText with
 // `{ kind: 'sample', name, size }` — DocumentSource shape matches
 // the existing file / url / paste pipeline so the source chip in
@@ -31,7 +41,11 @@ import { Button } from '@/components/ui/button';
 import { SAMPLES, type Sample } from '@/lib/samples/samples';
 import { useDocumentStore } from '@/state/documentStore';
 
-export function EmptyStateHero() {
+type Props = {
+  onActivate: () => void;
+};
+
+export function EmptyStateHero({ onActivate }: Props) {
   const setText = useDocumentStore((s) => s.setText);
 
   useEffect(() => {
@@ -65,7 +79,21 @@ export function EmptyStateHero() {
   };
 
   return (
-    <div className="border-border/40 m-3 flex h-[calc(100%-1.5rem)] flex-col items-center justify-center gap-6 rounded-lg border border-dashed p-6 text-center">
+    <div
+      className="border-border/40 m-3 flex h-[calc(100%-1.5rem)] cursor-text flex-col items-center justify-center gap-6 rounded-lg border border-dashed p-6 text-center"
+      onClick={onActivate}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        // Keyboard equivalent: Enter / Space activates the editor.
+        // Lets keyboard-only users escape the hero without a sample
+        // button or paste shortcut.
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
+    >
       <FileJson
         className="text-muted-foreground/50 size-12"
         aria-hidden

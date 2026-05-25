@@ -30,6 +30,14 @@ export function MonacoPane() {
   // documentStore.
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Click-to-mount intent: when the user clicks the empty-state hero,
+  // we want to skip the hero and mount Monaco even though
+  // text/source are still empty. Once Monaco mounts, typing populates
+  // documentStore and the (text === '' && source === null) gate flips
+  // false on its own — this flag bridges the moment between click and
+  // first keystroke. Local to the editor pane: the rest of the app
+  // doesn't need to know we've mounted Monaco yet.
+  const [editorActivated, setEditorActivated] = useState(false);
 
   // Skip Monaco entirely when the source is too large to render. Returns
   // a {name, size} record for the placeholder when applicable, null
@@ -122,13 +130,13 @@ export function MonacoPane() {
             name={viewerOnly.name}
             size={viewerOnly.size}
           />
-        ) : text === '' && source === null ? (
-          // Empty-state hero — no document loaded yet. Defers Monaco
+        ) : text === '' && source === null && !editorActivated ? (
+          // Empty-state hero — no document loaded yet AND the user
+          // hasn't signaled intent to type by clicking. Defers Monaco
           // instantiation until the user actually needs the editor
-          // (drop / paste / sample click), shaving the editor module
-          // off the cold-load critical path. Drop handler is inherited
-          // from the parent div's onDrop above.
-          <EmptyStateHero />
+          // (drop / paste / sample click / hero-click). Drop handler
+          // is inherited from the parent div's onDrop above.
+          <EmptyStateHero onActivate={() => setEditorActivated(true)} />
         ) : (
           <Suspense
             fallback={
