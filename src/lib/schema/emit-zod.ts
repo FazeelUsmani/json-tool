@@ -23,7 +23,7 @@
 // lift this into `z.union([...])` when we add union support.
 
 import type { IRField, IRSchema } from './types';
-import { isSafeIdentifier } from './identifier';
+import { isSafeIdentifier } from '@/lib/json/identifier';
 
 export type ZodEmitResult = {
   source: string;

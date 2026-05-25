@@ -30,7 +30,7 @@
 // and keeps the emitter generator simple.
 
 import type { IRField, IRSchema } from './types';
-import { isSafeIdentifier } from './identifier';
+import { isSafeIdentifier } from '@/lib/json/identifier';
 
 export type TypeScriptEmitResult = {
   source: string;
