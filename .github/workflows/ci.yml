@@ -1,0 +1,51 @@
+# CI gate for json-tool. Runs on every push to main + every PR
+# targeting main. Six steps, fail-fast in order — typecheck before
+# the longer test + build, so type errors surface immediately
+# instead of after a 2-3 min build.
+#
+# Node version is sourced from .nvmrc so local + CI stay aligned
+# (matches the take-time-for-quality memory: deploy/CI configs must
+# match the repo's local version pin).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build
+
+      # Audit at "high" — known moderate dompurify advisories transit
+      # via Monaco. Bump to --audit-level=moderate once the Monaco
+      # breaking upgrade lands (tracked separately as audit-response
+      # slice 5 in launch-readiness-gate.md).
+      - name: Audit
+        run: npm audit --audit-level=high
