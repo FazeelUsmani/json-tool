@@ -1,16 +1,32 @@
 // Hardened URL fetcher for the `?url=` load handler.
 //
-// Constraints (PLAN.MD W1 Tue):
+// Constraints:
 //   - client-side fetch only (no proxy)
-//   - reject Content-Length > 100 MiB
+//   - http: / https: only — `file:`, `data:`, `javascript:`, `blob:` all
+//     rejected at the URL-parse boundary
+//   - reject URLs carrying userinfo (`https://user:pass@host/`) — those
+//     leak credentials to history / referrer / analytics scripts
+//   - `credentials: 'omit'` + `referrerPolicy: 'no-referrer'` on every
+//     fetch — no cookies, no token leaks via Referer
+//   - byte cap enforced DURING the body stream, not just on
+//     Content-Length. Servers that omit or lie about the header can no
+//     longer force unbounded materialization (Mahira §2 Red Flag #3)
 //   - allowlist application/json + JSON Lines variants + text/plain
 //   - 30s timeout (composable with caller AbortSignal)
 //   - HTTP errors mapped to typed result, not exceptions
 //
+// Returns a `Blob` rather than a string so the streaming parser (in the
+// worker) can consume `blob.stream()` without the main thread ever
+// materializing the full body as a JS string. For 500 MB JSON loads
+// this is the difference between ~1.5 GB peak RSS (string + Blob +
+// parsed) and ~500 MB peak (Blob only). The caller decides whether to
+// decode for Monaco (`await blob.text()` for sub-10MB) or skip Monaco
+// and route the Blob straight at the parser worker (viewer-only mode).
+//
 // Discriminated-union result: caller pattern-matches on `result.ok` then
 // `result.error.kind`. No exceptions are thrown for *expected* failures
-// (timeout, 404, too-large, etc.) — those are values. Exceptions escape only
-// for genuine bugs.
+// (timeout, 404, too-large, invalid-protocol, etc.) — those are values.
+// Exceptions escape only for genuine bugs.
 //
 // Redirect note: PLAN.MD calls for "max 3 redirects." Browser fetch cannot
 // reliably limit redirects from client JS for cross-origin requests
@@ -21,7 +37,7 @@
 export type FetchUrlResult =
   | {
       ok: true;
-      text: string;
+      blob: Blob;
       contentType: string;
       finalUrl: string;
       bytes: number;
@@ -30,6 +46,8 @@ export type FetchUrlResult =
 
 export type FetchUrlError =
   | { kind: 'invalid-url' }
+  | { kind: 'invalid-protocol'; got: string }
+  | { kind: 'userinfo-not-allowed' }
   | { kind: 'too-large'; contentLength: number; max: number }
   | { kind: 'unsupported-content-type'; got: string; allowed: readonly string[] }
   | { kind: 'timeout'; afterMs: number }
@@ -37,7 +55,7 @@ export type FetchUrlError =
   | { kind: 'network'; cause: unknown };
 
 export interface FetchUrlOptions {
-  /** Max declared Content-Length to accept. Default 100 MiB. */
+  /** Max bytes to read from the response body before bailing. Default 500 MiB. */
   maxBytes?: number;
   /** Hard timeout. Default 30_000 (30s). */
   timeoutMs?: number;
@@ -48,9 +66,9 @@ export interface FetchUrlOptions {
 }
 
 // Matches the file-drop hero claim (500 MB ceiling in MonacoPane).
-// The streaming Tokenizer.onToken parser shipped in W3 — `?url=` no
-// longer needs the lower 100 MiB cap that the old main-thread
-// JSON.parse path required to avoid tab OOM.
+// The streaming Tokenizer.onToken parser consumes blob.stream() in the
+// worker — no main-thread string materialization, so the cap can sit
+// at the same level as local file drops.
 const DEFAULT_MAX_BYTES = 500 * 1024 * 1024; // 500 MiB
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ALLOWED_CONTENT_TYPES: readonly string[] = [
@@ -59,6 +77,7 @@ const DEFAULT_ALLOWED_CONTENT_TYPES: readonly string[] = [
   'application/jsonlines',
   'text/plain',
 ];
+const ALLOWED_PROTOCOLS: readonly string[] = ['http:', 'https:'];
 
 export async function fetchUrl(
   url: string,
@@ -69,11 +88,25 @@ export async function fetchUrl(
   const allowedContentTypes =
     opts.allowedContentTypes ?? DEFAULT_ALLOWED_CONTENT_TYPES;
 
-  // (1) URL parse — rejects "not a url" before we touch fetch.
+  // (1) URL parse + protocol allowlist + userinfo rejection.
+  let parsed: URL;
   try {
-    new URL(url);
+    parsed = new URL(url);
   } catch {
     return { ok: false, error: { kind: 'invalid-url' } };
+  }
+  if (!ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
+    return {
+      ok: false,
+      error: { kind: 'invalid-protocol', got: parsed.protocol },
+    };
+  }
+  // `new URL("https://user:pass@host/")` parses; we reject because the
+  // userinfo would otherwise be sent in the Authorization header on
+  // redirect, logged in browser history, and visible in the toolbar's
+  // "Loaded from" chip. Same defense pattern as curl --proto-default.
+  if (parsed.username !== '' || parsed.password !== '') {
+    return { ok: false, error: { kind: 'userinfo-not-allowed' } };
   }
 
   // (2) Compose timeout with caller signal.
@@ -89,7 +122,14 @@ export async function fetchUrl(
 
   let response: Response;
   try {
-    response = await fetch(url, { signal });
+    response = await fetch(url, {
+      signal,
+      // No cookies / Authorization tokens on cross-origin fetches.
+      credentials: 'omit',
+      // No Referer header — keeps signed/tokenized originating URLs
+      // off the wire to third parties.
+      referrerPolicy: 'no-referrer',
+    });
   } catch (err) {
     clearTimeout(timeoutHandle);
     if (timedOut) {
@@ -111,12 +151,10 @@ export async function fetchUrl(
     };
   }
 
-  // (4) Declared size check (Content-Length header).
-  // TODO(W2/W3): enforce maxBytes during stream consumption for
-  // chunked / no-Content-Length responses. Currently a server can omit the
-  // header (or lie about it) and we would download the full body before
-  // noticing. Acceptable for M1 because the typical bad case is a slow load,
-  // not a memory blow-up — but harden before launch.
+  // (4) Declared size fast-fail (Content-Length header). This is the
+  // pre-stream check — it lets us reject without burning bandwidth on
+  // a known-too-large response. The streaming loop below catches the
+  // remaining case where the header lies or is absent.
   const contentLengthHeader = response.headers.get('content-length');
   if (contentLengthHeader != null) {
     const contentLength = Number(contentLengthHeader);
@@ -147,10 +185,39 @@ export async function fetchUrl(
     };
   }
 
-  // (6) Read body.
-  let text: string;
+  // (6) Stream the body, accumulating chunks into a Blob and enforcing
+  // the byte cap during read. The cap is checked on each chunk so a
+  // chunked / lying-Content-Length response cannot force unbounded
+  // memory growth (Mahira §2 Red Flag #3). On overflow we cancel the
+  // reader (releases the underlying stream) and return too-large with
+  // the byte count we got to before bailing.
+  if (response.body === null) {
+    // Shouldn't happen for a real fetch — defensive for edge runtimes.
+    clearTimeout(timeoutHandle);
+    return { ok: false, error: { kind: 'network', cause: 'no body' } };
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
   try {
-    text = await response.text();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        // Release the underlying stream. We don't await — at this point
+        // the result is decided; letting cancel run in the background is
+        // fine and avoids a second await-roundtrip.
+        void reader.cancel();
+        clearTimeout(timeoutHandle);
+        return {
+          ok: false,
+          error: { kind: 'too-large', contentLength: totalBytes, max: maxBytes },
+        };
+      }
+      chunks.push(value);
+    }
   } catch (err) {
     clearTimeout(timeoutHandle);
     if (timedOut) {
@@ -161,23 +228,24 @@ export async function fetchUrl(
 
   clearTimeout(timeoutHandle);
 
-  // `bytes` is the server-declared length when available, falling back to
-  // a true UTF-8 byte count via TextEncoder. The old fallback used
-  // `text.length` (UTF-16 code units) — for ASCII content that matches,
-  // but for multibyte (CJK, emoji) it underestimates the byte size by
-  // up to 3×, which lets oversized loads slip past the viewer-only-mode
-  // threshold check downstream.
-  const declared = contentLengthHeader != null ? Number(contentLengthHeader) : NaN;
-  const bytes = Number.isFinite(declared)
-    ? declared
-    : new TextEncoder().encode(text).byteLength;
+  // Construct the Blob from the accumulated chunks. Type is the server's
+  // Content-Type so downstream `blob.type` reads cleanly; if absent we
+  // leave it empty (matches new Blob() default). Cast through BlobPart[]
+  // because TS strictness flags Uint8Array<ArrayBufferLike> vs the Blob
+  // ctor's narrower Uint8Array<ArrayBuffer> expectation — runtime is fine.
+  const blob = new Blob(
+    chunks as unknown as BlobPart[],
+    contentTypeHeader ? { type: contentTypeHeader } : {},
+  );
 
   return {
     ok: true,
-    text,
+    blob,
     contentType: contentTypeHeader,
     finalUrl: response.url || url,
-    bytes,
+    // True byte count from the stream — no more TextEncoder fallback or
+    // Content-Length trust.
+    bytes: totalBytes,
   };
 }
 

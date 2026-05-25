@@ -3,6 +3,7 @@ import { useDocumentStore } from '@/state/documentStore';
 import { useDarkClass } from '@/lib/theme/useDarkClass';
 import { EditorToolbar } from './EditorToolbar';
 import { EmptyStateHero } from './EmptyStateHero';
+import { MAX_FILE_BYTES, VIEWER_ONLY_THRESHOLD } from './constants';
 
 // Monaco is loaded lazily so it doesn't block first paint (it's ~2MB of
 // editor code + workers). The init module is imported first inside the lazy
@@ -16,13 +17,6 @@ const MonacoEditor = lazy(async () => {
   return { default: mod.default };
 });
 
-// Hard upper bound for either path. Above this we refuse the file outright.
-const MAX_FILE_BYTES = 500 * 1024 * 1024;
-// Above this size we skip Monaco entirely and render a viewer-only
-// placeholder — Monaco's main-thread tokenize/render on a multi-MB string
-// freezes (and at 100MB+ crashes) the tab. The streaming parser still
-// reads the File via .stream() and populates the tree pane normally.
-const VIEWER_ONLY_THRESHOLD = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.json', '.ndjson', '.jsonl'] as const;
 
 export function MonacoPane() {

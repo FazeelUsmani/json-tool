@@ -4,8 +4,13 @@ import { fetchUrl } from './fetchUrl';
 type FetchMock = ReturnType<typeof vi.fn>;
 
 function makeResponse(
-  body: string,
-  init: { status?: number; statusText?: string; headers?: Record<string, string>; url?: string } = {},
+  body: BodyInit | null,
+  init: {
+    status?: number;
+    statusText?: string;
+    headers?: Record<string, string>;
+    url?: string;
+  } = {},
 ): Response {
   const res = new Response(body, {
     status: init.status ?? 200,
@@ -16,6 +21,24 @@ function makeResponse(
     Object.defineProperty(res, 'url', { value: init.url });
   }
   return res;
+}
+
+// Build a Response whose body is a streamed sequence of byte chunks.
+// Used to exercise the streaming byte-cap and chunked-without-CL paths.
+function makeStreamingResponse(
+  chunks: Uint8Array[],
+  init: {
+    headers?: Record<string, string>;
+    url?: string;
+  } = {},
+): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+  return makeResponse(stream, init);
 }
 
 describe('fetchUrl', () => {
@@ -30,7 +53,7 @@ describe('fetchUrl', () => {
     vi.useRealTimers();
   });
 
-  test('success: returns text + contentType + finalUrl + bytes', async () => {
+  test('success: returns blob + contentType + finalUrl + bytes', async () => {
     const body = '{"hello":"world"}';
     (globalThis.fetch as FetchMock).mockResolvedValue(
       makeResponse(body, {
@@ -46,16 +69,16 @@ describe('fetchUrl', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.text).toBe(body);
+    expect(await result.blob.text()).toBe(body);
     expect(result.contentType).toBe('application/json');
     expect(result.finalUrl).toBe('https://example.com/data.json');
     expect(result.bytes).toBe(body.length);
+    expect(result.blob.type).toBe('application/json');
   });
 
   test('rejects when Content-Length exceeds maxBytes', async () => {
-    // Default cap is 500 MiB (matches the file-drop hero ceiling).
-    // Use 600 MiB so the over-limit assertion stays meaningful even
-    // if downstream tweaks the constant by a small amount.
+    // Default cap is 500 MiB; declared 600 MiB triggers the pre-stream
+    // fast-fail without ever reading the body.
     (globalThis.fetch as FetchMock).mockResolvedValue(
       makeResponse('', {
         headers: {
@@ -73,6 +96,37 @@ describe('fetchUrl', () => {
     if (result.error.kind !== 'too-large') return;
     expect(result.error.contentLength).toBe(600 * 1024 * 1024);
     expect(result.error.max).toBe(500 * 1024 * 1024);
+  });
+
+  test('streaming cap rejects bodies past maxBytes when Content-Length is absent or lies', async () => {
+    // Server claims small (or omits CL) but actually streams more than
+    // maxBytes. The pre-stream check passes; the in-loop check must
+    // fire and cancel the reader. Without this guard, the prior
+    // implementation would await response.text() and materialize the
+    // whole body before noticing.
+    const chunk = new Uint8Array(64); // 64 bytes per chunk
+    chunk.fill(0x20); // ' ' — well-formed UTF-8 to keep content-type happy
+    const chunks: Uint8Array[] = [];
+    // 6 chunks × 64 bytes = 384 bytes total against a 256-byte cap.
+    for (let i = 0; i < 6; i++) chunks.push(chunk);
+    (globalThis.fetch as FetchMock).mockResolvedValue(
+      makeStreamingResponse(chunks, {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await fetchUrl('https://example.com/sneaky.json', {
+      maxBytes: 256,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe('too-large');
+    if (result.error.kind !== 'too-large') return;
+    // contentLength here is the running total at the point we bailed —
+    // at least maxBytes + 1, never the full would-be total.
+    expect(result.error.contentLength).toBeGreaterThan(256);
+    expect(result.error.max).toBe(256);
   });
 
   test('rejects disallowed content-type', async () => {
@@ -103,7 +157,7 @@ describe('fetchUrl', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.text).toBe(body);
+    expect(await result.blob.text()).toBe(body);
     expect(result.contentType).toBe('application/json; charset=utf-8');
   });
 
@@ -119,8 +173,8 @@ describe('fetchUrl', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.text).toBe(body);
-    // bytes falls back to JS string length when Content-Length is absent
+    expect(await result.blob.text()).toBe(body);
+    // bytes is the actual streamed byte count now, not a fallback.
     expect(result.bytes).toBe(body.length);
   });
 
@@ -191,5 +245,69 @@ describe('fetchUrl', () => {
     // Caller-initiated abort: surfaces as 'network' (not 'timeout', since the
     // internal timer didn't fire). The cause field carries the AbortError.
     expect(result.error.kind).toBe('network');
+  });
+});
+
+describe('fetchUrl — security hardening', () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test('rejects non-http(s) protocols without calling fetch', async () => {
+    const cases: Array<[string, string]> = [
+      ['file:///etc/passwd', 'file:'],
+      ['data:application/json,{"x":1}', 'data:'],
+      ['javascript:alert(1)', 'javascript:'],
+      ['blob:https://example.com/abc', 'blob:'],
+      ['ftp://example.com/foo.json', 'ftp:'],
+    ];
+    for (const [url, expectedProtocol] of cases) {
+      const result = await fetchUrl(url);
+      expect(result.ok, `expected reject for ${url}`).toBe(false);
+      if (result.ok) continue;
+      expect(result.error.kind).toBe('invalid-protocol');
+      if (result.error.kind !== 'invalid-protocol') continue;
+      expect(result.error.got).toBe(expectedProtocol);
+    }
+    // Fetch must never have been called for any of the above.
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('rejects URLs with userinfo (https://user:pass@host/)', async () => {
+    const result = await fetchUrl(
+      'https://alice:secret@example.com/data.json',
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe('userinfo-not-allowed');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('rejects URLs with just username (no password)', async () => {
+    const result = await fetchUrl('https://alice@example.com/data.json');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe('userinfo-not-allowed');
+  });
+
+  test('fetch is called with credentials:omit + referrerPolicy:no-referrer', async () => {
+    (globalThis.fetch as FetchMock).mockResolvedValue(
+      makeResponse('{}', {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await fetchUrl('https://example.com/data.json');
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const init = (globalThis.fetch as FetchMock).mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe('omit');
+    expect(init.referrerPolicy).toBe('no-referrer');
   });
 });

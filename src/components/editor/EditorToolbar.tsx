@@ -12,6 +12,7 @@ import {
 } from '@/lib/json/format';
 import { repair } from '@/lib/json/repair';
 import { fetchUrl, type FetchUrlError } from '@/lib/net/fetchUrl';
+import { MAX_FILE_BYTES, VIEWER_ONLY_THRESHOLD } from './constants';
 import { RepairDialog } from './RepairDialog';
 
 type Transform = (text: string) => FormatResult;
@@ -83,16 +84,27 @@ export function EditorToolbar({ error, setError }: Props) {
     setRequestedUrl(url);
     setError(null);
     try {
-      const result = await fetchUrl(url);
-      if (result.ok) {
-        setText(result.text, {
-          kind: 'url',
-          url: result.finalUrl,
-          size: result.bytes,
-        });
+      const result = await fetchUrl(url, { maxBytes: MAX_FILE_BYTES });
+      if (!result.ok) {
+        setError(describeFetchError(result.error));
         return;
       }
-      setError(describeFetchError(result.error));
+      const source = {
+        kind: 'url' as const,
+        url: result.finalUrl,
+        size: result.bytes,
+      };
+      // Mirror MonacoPane's file-drop dispatch: skip Monaco above the
+      // viewer-only threshold and route the Blob straight to the streaming
+      // parser via documentStore.file. Below the threshold, decode for
+      // Monaco display but still carry the Blob so the parser worker
+      // reads bytes via blob.stream() instead of re-encoding the text.
+      if (result.bytes > VIEWER_ONLY_THRESHOLD) {
+        setText('', source, result.blob);
+        return;
+      }
+      const text = await result.blob.text();
+      setText(text, source, result.blob);
     } finally {
       setLoadingUrl(null);
     }
@@ -194,6 +206,10 @@ function describeFetchError(error: FetchUrlError): string {
   switch (error.kind) {
     case 'invalid-url':
       return 'Invalid URL';
+    case 'invalid-protocol':
+      return `Unsupported protocol: ${error.got} (only http: / https: allowed)`;
+    case 'userinfo-not-allowed':
+      return 'URL must not include credentials (user:pass@…)';
     case 'too-large':
       return `Too large: ${formatBytes(error.contentLength)} > ${formatBytes(error.max)}`;
     case 'unsupported-content-type':
