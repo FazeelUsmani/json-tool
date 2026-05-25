@@ -23,6 +23,8 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 - [x] **`?url=` security hardening** — closed 2026-05-25 (commit `a08133c`). `fetch(url)` now sets `credentials: 'omit'` + `referrerPolicy: 'no-referrer'`; URL parsing rejects non-`http:`/`https:` protocols and any URL carrying userinfo. New error kinds `invalid-protocol` + `userinfo-not-allowed` surfaced through the editor's error pill. (Mahira §5 weakness 3-4)
 
+- [x] **`?url=` auto-fetch leak** — closed 2026-05-25 (slice 3.5). `?url=` is now a pre-fill convenience, not an auto-load command — the user clicks Load to fire the fetch, so destination servers receive a request only on explicit intent. `history.replaceState` strips the param from `window.location` on mount before Plausible's auto-pageview captures it. Closes the "auto-load can leak signed/tokenized URLs to browser history, DOM display, analytics, referrer" finding. (Mahira §5 weakness 2, Action Item §5 #3)
+
 ### Privacy / claim alignment
 
 - [x] **"100% client-side" badge over-claimed against Plausible** — badge text was rephrased to "Your JSON stays local" + tooltip now discloses Plausible analytics explicitly (2026-05-22 evening). Honest about what's local (the JSON content) without claiming the page itself is third-party-script-free. (Mahira §5 weakness 1, Red Flag #4)

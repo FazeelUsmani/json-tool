@@ -55,6 +55,12 @@ git log carries the per-commit detail.
   `referrerPolicy: 'no-referrer'`. EditorToolbar mirrors the
   file-drop dispatch so 500MB URL loads behave the same as 500MB
   drops. Closes Mahira Red Flags #2 + #3.
+- **`?url=` auto-fetch removed** (slice 3.5) — `?url=` now pre-fills
+  the URL input instead of auto-firing the fetch; user clicks Load to
+  trigger. `history.replaceState` strips the param from
+  `window.location` on mount so Plausible's auto-pageview can't
+  capture it. Closes Mahira §5 weakness 2 (auto-load leaks signed
+  URLs to history / analytics / referrer).
 
 ### Measured
 
@@ -90,9 +96,6 @@ git log carries the per-commit detail.
 
 ### Deferred
 
-- `?url=` auto-fetch confirmation (Mahira §5 #3) — separate UX design
-  pass; the right answer might be pre-fill-then-click, not a banner.
-  Queued as slice 3.5.
 - Monaco / dompurify breaking upgrade (audit slice 4, ~2-4h).
 - Branch protection flip on `main` (your GitHub-side action).
 - README rewrite — currently default Vite boilerplate (~1-2h).

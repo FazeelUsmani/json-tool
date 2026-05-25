@@ -117,8 +117,23 @@ export function EditorToolbar({ error, setError }: Props) {
   };
 
   useEffect(() => {
+    // `?url=` is a pre-fill convenience, NOT an auto-load command. The
+    // user clicks Load to fire the fetch, which keeps destination
+    // servers from receiving a request without explicit user intent
+    // (the privacy event is the fetch, not the URL appearing in the
+    // address bar). Closes Mahira §5 #3.
+    //
+    // Also strip the param from window.location before any analytics
+    // pageview captures it. Plausible's auto-pageview reads
+    // window.location.href at script eval; replaceState here happens
+    // synchronously on mount, before the first event fires.
     const url = new URLSearchParams(window.location.search).get('url');
-    if (url) loadFromUrl(url);
+    if (url) {
+      setUrlInput(url);
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('url');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
