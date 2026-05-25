@@ -326,15 +326,18 @@ describe('inferSchema — stub + ndjson-line expansion via fetchStub', () => {
 // --- sampling at scale ---
 
 describe('inferSchema — sampling at scale', () => {
-  test('5000-element array completes under 100ms (sampling kicks in)', async () => {
+  test('5000-element array infers item shape (sampling kicks in)', async () => {
+    // Functional check that sampling completes + returns the correct
+    // schema. The earlier `< 100ms` wall-clock assertion is gone — it
+    // flaked on slow CI runners and the real perf guarantee is now
+    // covered by the on-demand SMOKE workflow (`perf.yml`) + the
+    // catastrophic-tolerance assertions there. Subtle slowdowns
+    // surface via the manual methodology.md workflow.
     const children: TreeNode[] = [];
     for (let i = 0; i < 5000; i++) {
       children.push(num(`${i}`, `$[${i}]`, i));
     }
-    const t0 = performance.now();
     const result = await inferSchema(arr('$', children), noFetch);
-    const elapsed = performance.now() - t0;
-    expect(elapsed).toBeLessThan(100);
     expect(result).toEqual({
       kind: 'array',
       items: { kind: 'number', nullable: false },
