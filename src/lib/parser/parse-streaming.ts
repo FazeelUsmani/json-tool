@@ -26,6 +26,12 @@ import TokenType from '@streamparser/json/utils/types/tokenType.js';
 import type { ParsedTokenInfo } from '@streamparser/json/utils/types/parsedTokenInfo.js';
 import type { TreeNode } from '@/lib/tree/parse';
 import {
+  ROOT_ID,
+  ROOT_PATH,
+  appendDisplayPath,
+  appendPointer,
+} from './identity';
+import {
   MAX_SPINE_DEPTH,
   type ByteIndexEntry,
   type ParseError,
@@ -40,6 +46,7 @@ import { sampleByteIndex, type SamplingOptions } from './sample-index';
 // position (value context). pendingKey only matters for object frames.
 type ObjectFrame = {
   kind: 'object';
+  id: string;
   key: string | null;
   path: string;
   children: TreeNode[];
@@ -51,6 +58,7 @@ type ObjectFrame = {
 
 type ArrayFrame = {
   kind: 'array';
+  id: string;
   key: string | null;
   path: string;
   children: TreeNode[];
@@ -75,6 +83,7 @@ type Frame = ObjectFrame | ArrayFrame;
 // depthAccum=1) from "we're inside an element" (false).
 type StubState = {
   kind: 'stub-object' | 'stub-array';
+  id: string;
   key: string | null;
   path: string;
   byteStart: number;
@@ -97,6 +106,11 @@ export type ParseOptions = {
   // result shifted by `byteOffsetBase` so they point into the ORIGINAL
   // file (not the slice). Defaults '$' / 0 — top-level parse uses these.
   basePath?: string;
+  // Matching JSON Pointer for `basePath`. Defaults to ROOT_ID (""),
+  // which pairs with basePath default of "$". For stub expansion the
+  // caller must pass both so the re-parsed subtree's ids prefix-match
+  // the original stub's id (collapse state survives expand-replace).
+  baseId?: string;
   byteOffsetBase?: number;
   // byteIndex stub sampling. Defaults to threshold=1000, n=100. Pass
   // { threshold: Infinity } to disable for callers that need the full
@@ -123,20 +137,26 @@ export async function parseStreaming(
   let parseError: ParseError | undefined;
   let halted = false; // set after onError; ignores further tokens
 
-  const basePath = opts.basePath ?? '$';
+  const basePath = opts.basePath ?? ROOT_PATH;
+  const baseId = opts.baseId ?? ROOT_ID;
   const byteOffsetBase = opts.byteOffsetBase ?? 0;
 
   // ----- helpers ----------------------------------------------------------
 
   const peek = (): Frame | null => stack[stack.length - 1] ?? null;
 
-  // Path + key for the NEXT child the parent will attach. Reads (and for
-  // objects, consumes via pendingKey) the parent's state. For the root
-  // (no parent), returns the basePath ('$' for top-level parse, the stub
-  // path for expansion).
-  const nextChildIdentity = (): { key: string | null; path: string } => {
+  // Identity for the NEXT child the parent will attach. Returns the
+  // {key, id (JSON Pointer), path (JSONPath display)} triple. Reads
+  // (and for objects, consumes via pendingKey) the parent's state.
+  // For the root (no parent), returns base{Id,Path} — `'$' / ''` for
+  // top-level parse, or the stub identity for expansion.
+  const nextChildIdentity = (): {
+    key: string | null;
+    id: string;
+    path: string;
+  } => {
     const p = peek();
-    if (p === null) return { key: null, path: basePath };
+    if (p === null) return { key: null, id: baseId, path: basePath };
     if (p.kind === 'object') {
       // Tokenizer invariant: in an object frame, every value token is
       // preceded by a key STRING token that sets pendingKey. If pendingKey
@@ -148,9 +168,17 @@ export async function parseStreaming(
         );
       }
       const key = p.pendingKey;
-      return { key, path: `${p.path}.${key}` };
+      return {
+        key,
+        id: appendPointer(p.id, key),
+        path: appendDisplayPath(p.path, key),
+      };
     }
-    return { key: String(p.elementIndex), path: `${p.path}[${p.elementIndex}]` };
+    return {
+      key: String(p.elementIndex),
+      id: appendPointer(p.id, p.elementIndex),
+      path: appendDisplayPath(p.path, p.elementIndex),
+    };
   };
 
   // Attach a finished TreeNode to its parent (or set as root if no parent).
@@ -201,6 +229,7 @@ export async function parseStreaming(
           stub.kind === 'stub-object'
             ? {
                 kind: 'stub-object',
+                id: stub.id,
                 key: stub.key,
                 path: stub.path,
                 byteStart: stub.byteStart,
@@ -210,6 +239,7 @@ export async function parseStreaming(
               }
             : {
                 kind: 'stub-array',
+                id: stub.id,
                 key: stub.key,
                 path: stub.path,
                 byteStart: stub.byteStart,
@@ -235,7 +265,7 @@ export async function parseStreaming(
       case TokenType.LEFT_BRACE:
       case TokenType.LEFT_BRACKET: {
         const isObj = info.token === TokenType.LEFT_BRACE;
-        const { key, path } = nextChildIdentity();
+        const { key, id, path } = nextChildIdentity();
         if (depth >= MAX_SPINE_DEPTH) {
           // Progressive disclosure: do NOT walk into this subtree. The
           // initial parse only materializes the top MAX_SPINE_DEPTH levels;
@@ -249,6 +279,7 @@ export async function parseStreaming(
           // the stub's outermost container).
           stub = {
             kind: isObj ? 'stub-object' : 'stub-array',
+            id,
             key,
             path,
             byteStart: info.offset + byteOffsetBase,
@@ -264,6 +295,7 @@ export async function parseStreaming(
           const frame: Frame = isObj
             ? {
                 kind: 'object',
+                id,
                 key,
                 path,
                 children: [],
@@ -272,6 +304,7 @@ export async function parseStreaming(
               }
             : {
                 kind: 'array',
+                id,
                 key,
                 path,
                 children: [],
@@ -298,12 +331,14 @@ export async function parseStreaming(
           frame.kind === 'object'
             ? {
                 kind: 'object',
+                id: frame.id,
                 key: frame.key,
                 path: frame.path,
                 children: frame.children,
               }
             : {
                 kind: 'array',
+                id: frame.id,
                 key: frame.key,
                 path: frame.path,
                 children: frame.children,
@@ -327,23 +362,36 @@ export async function parseStreaming(
         } else {
           // Otherwise it's a value: either array element, or object value
           // following a key (pendingKey is set).
-          const { key, path } = nextChildIdentity();
-          attach({ kind: 'string', key, path, value: info.value as string });
+          const { key, id, path } = nextChildIdentity();
+          attach({
+            kind: 'string',
+            id,
+            key,
+            path,
+            value: info.value as string,
+          });
         }
         break;
       }
 
       case TokenType.NUMBER: {
-        const { key, path } = nextChildIdentity();
-        attach({ kind: 'number', key, path, value: info.value as number });
+        const { key, id, path } = nextChildIdentity();
+        attach({
+          kind: 'number',
+          id,
+          key,
+          path,
+          value: info.value as number,
+        });
         break;
       }
 
       case TokenType.TRUE:
       case TokenType.FALSE: {
-        const { key, path } = nextChildIdentity();
+        const { key, id, path } = nextChildIdentity();
         attach({
           kind: 'boolean',
+          id,
           key,
           path,
           value: info.token === TokenType.TRUE,
@@ -352,8 +400,8 @@ export async function parseStreaming(
       }
 
       case TokenType.NULL: {
-        const { key, path } = nextChildIdentity();
-        attach({ kind: 'null', key, path });
+        const { key, id, path } = nextChildIdentity();
+        attach({ kind: 'null', id, key, path });
         break;
       }
 
@@ -490,12 +538,14 @@ export async function parseStreaming(
           frame.kind === 'object'
             ? {
                 kind: 'object',
+                id: frame.id,
                 key: frame.key,
                 path: frame.path,
                 children: frame.children,
               }
             : {
                 kind: 'array',
+                id: frame.id,
                 key: frame.key,
                 path: frame.path,
                 children: frame.children,

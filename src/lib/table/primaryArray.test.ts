@@ -2,14 +2,16 @@ import { describe, expect, test } from 'vitest';
 import { findPrimaryArray } from './primaryArray';
 import type { TreeNode } from '@/lib/tree/parse';
 
+// Test helpers reuse `path` as id (see note in infer.test.ts) — findPrimaryArray
+// only inspects kind/children/childCount, never id.
 function arr(key: string | null, path: string, children: TreeNode[]): TreeNode {
-  return { kind: 'array', key, path, children };
+  return { kind: 'array', id: path, key, path, children };
 }
 function obj(key: string | null, path: string, children: TreeNode[]): TreeNode {
-  return { kind: 'object', key, path, children };
+  return { kind: 'object', id: path, key, path, children };
 }
 function num(key: string | null, path: string): TreeNode {
-  return { kind: 'number', key, path, value: 1 };
+  return { kind: 'number', id: path, key, path, value: 1 };
 }
 
 describe('findPrimaryArray', () => {
@@ -86,6 +88,7 @@ describe('findPrimaryArray', () => {
     // was built for.
     const stub: TreeNode = {
       kind: 'stub-array',
+      id: '$',
       key: null,
       path: '$',
       byteStart: 0,
@@ -99,6 +102,7 @@ describe('findPrimaryArray', () => {
   test('object child of root is stub-array → returned with $.key path', () => {
     const stub: TreeNode = {
       kind: 'stub-array',
+      id: '$.events',
       key: 'events',
       path: '$.events',
       byteStart: 100,
@@ -120,6 +124,7 @@ describe('findPrimaryArray', () => {
     ]);
     const bigStub: TreeNode = {
       kind: 'stub-array',
+      id: '$.big',
       key: 'big',
       path: '$.big',
       byteStart: 0,

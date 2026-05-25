@@ -2,24 +2,26 @@ import { describe, expect, test } from 'vitest';
 import { computeSpineMetrics } from './metrics';
 import type { TreeNode } from './parse';
 
+// metrics walks kind only; id is irrelevant here so all fixtures share '$'.
 function obj(children: TreeNode[]): TreeNode {
-  return { kind: 'object', key: null, path: '$', children };
+  return { kind: 'object', id: '$', key: null, path: '$', children };
 }
 function arr(children: TreeNode[]): TreeNode {
-  return { kind: 'array', key: null, path: '$', children };
+  return { kind: 'array', id: '$', key: null, path: '$', children };
 }
 function num(): TreeNode {
-  return { kind: 'number', key: null, path: '$', value: 1 };
+  return { kind: 'number', id: '$', key: null, path: '$', value: 1 };
 }
 function str(): TreeNode {
-  return { kind: 'string', key: null, path: '$', value: 'a' };
+  return { kind: 'string', id: '$', key: null, path: '$', value: 'a' };
 }
 function nullNode(): TreeNode {
-  return { kind: 'null', key: null, path: '$' };
+  return { kind: 'null', id: '$', key: null, path: '$' };
 }
 function stubObj(): TreeNode {
   return {
     kind: 'stub-object',
+    id: '$',
     key: null,
     path: '$',
     byteStart: 0,
@@ -31,6 +33,7 @@ function stubObj(): TreeNode {
 function stubArr(): TreeNode {
   return {
     kind: 'stub-array',
+    id: '$',
     key: null,
     path: '$',
     byteStart: 0,
@@ -40,7 +43,7 @@ function stubArr(): TreeNode {
   };
 }
 function line(): TreeNode {
-  return { kind: 'ndjson-line', key: null, path: '$', byteStart: 0, byteEnd: 1 };
+  return { kind: 'ndjson-line', id: '$', key: null, path: '$', byteStart: 0, byteEnd: 1 };
 }
 
 describe('computeSpineMetrics', () => {
@@ -122,6 +125,7 @@ describe('computeSpineMetrics', () => {
     // Stubs don't materialize children even when childCount > 0.
     const stubWithCount: TreeNode = {
       kind: 'stub-array',
+      id: '$',
       key: null,
       path: '$',
       byteStart: 0,

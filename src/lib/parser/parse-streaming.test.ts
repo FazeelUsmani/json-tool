@@ -33,7 +33,7 @@ describe('parseStreaming — spine', () => {
   test('primitive root', async () => {
     const r = await parse('42');
     expect(r.parseError).toBeUndefined();
-    expect(r.root).toEqual({ kind: 'number', key: null, path: '$', value: 42 });
+    expect(r.root).toEqual({ kind: 'number', id: '', key: null, path: '$', value: 42 });
   });
 
   test('flat object materializes all primitives', async () => {
@@ -70,6 +70,7 @@ describe('parseStreaming — spine', () => {
     if (outer?.kind !== 'object') throw new Error('unreachable');
     expect(outer.children[0]).toEqual({
       kind: 'number',
+      id: '/outer/v',
       key: 'v',
       path: '$.outer.v',
       value: 1,
@@ -424,7 +425,7 @@ describe('parseStreaming — error propagation (partial root)', () => {
     expect(r.parseError).toBeDefined();
     if (r.root?.kind !== 'object') throw new Error('expected partial root object');
     expect(r.root.children).toEqual([
-      { kind: 'number', key: 'a', path: '$.a', value: 1 },
+      { kind: 'number', id: '/a', key: 'a', path: '$.a', value: 1 },
     ]);
   });
 

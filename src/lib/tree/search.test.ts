@@ -17,11 +17,12 @@ function flat(text: string) {
 // composite whose children are stubs / ndjson-lines. Used by the
 // deep-search tests below so they don't depend on parseStreaming.
 function tree(children: TreeNode[]): TreeNode {
-  return { kind: 'array', key: null, path: '$', children };
+  return { kind: 'array', id: '$', key: null, path: '$', children };
 }
 function stubObj(idx: number, byteStart: number, byteEnd: number): TreeNode {
   return {
     kind: 'stub-object',
+    id: `$[${idx}]`,
     key: String(idx),
     path: `$[${idx}]`,
     byteStart,
@@ -33,6 +34,7 @@ function stubObj(idx: number, byteStart: number, byteEnd: number): TreeNode {
 function ndjsonLine(idx: number, byteStart: number, byteEnd: number): TreeNode {
   return {
     kind: 'ndjson-line',
+    id: `$[${idx}]`,
     key: String(idx),
     path: `$[${idx}]`,
     byteStart,
@@ -190,9 +192,10 @@ describe('collectStubRanges', () => {
   test('tree with only materialized composites → empty list', () => {
     const root: TreeNode = {
       kind: 'object',
+      id: '$',
       key: null,
       path: '$',
-      children: [{ kind: 'number', key: 'a', path: '$.a', value: 1 }],
+      children: [{ kind: 'number', id: '$.a', key: 'a', path: '$.a', value: 1 }],
     };
     expect(collectStubRanges(root)).toEqual([]);
   });
@@ -200,11 +203,13 @@ describe('collectStubRanges', () => {
   test('collects stub-object, stub-array, ndjson-line in tree order', () => {
     const root: TreeNode = {
       kind: 'object',
+      id: '$',
       key: null,
       path: '$',
       children: [
         {
           kind: 'stub-object',
+          id: '$.a',
           key: 'a',
           path: '$.a',
           byteStart: 10,
@@ -214,11 +219,13 @@ describe('collectStubRanges', () => {
         },
         {
           kind: 'array',
+          id: '$.events',
           key: 'events',
           path: '$.events',
           children: [
             {
               kind: 'ndjson-line',
+              id: '$.events[0]',
               key: '0',
               path: '$.events[0]',
               byteStart: 60,
@@ -226,6 +233,7 @@ describe('collectStubRanges', () => {
             },
             {
               kind: 'stub-array',
+              id: '$.events[1]',
               key: '1',
               path: '$.events[1]',
               byteStart: 90,
@@ -250,11 +258,13 @@ describe('collectStubRanges', () => {
     // additional ranges for what's inside it.
     const root: TreeNode = {
       kind: 'object',
+      id: '$',
       key: null,
       path: '$',
       children: [
         {
           kind: 'stub-object',
+          id: '$.a',
           key: 'a',
           path: '$.a',
           byteStart: 0,

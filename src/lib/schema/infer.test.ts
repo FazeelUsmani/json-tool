@@ -13,23 +13,26 @@ const noFetch: FetchStubValue = async () => {
 
 // --- builders ---
 
+// Test helpers reuse `path` as id since these fixtures hand-roll JSONPath
+// strings rather than threading RFC 6901 pointers — the walker doesn't
+// read id, so collision is irrelevant here.
 function obj(path: string, children: TreeNode[]): TreeNode {
-  return { kind: 'object', key: null, path, children };
+  return { kind: 'object', id: path, key: null, path, children };
 }
 function arr(path: string, children: TreeNode[]): TreeNode {
-  return { kind: 'array', key: null, path, children };
+  return { kind: 'array', id: path, key: null, path, children };
 }
 function num(key: string | null, path: string, value: number): TreeNode {
-  return { kind: 'number', key, path, value };
+  return { kind: 'number', id: path, key, path, value };
 }
 function str(key: string | null, path: string, value: string): TreeNode {
-  return { kind: 'string', key, path, value };
+  return { kind: 'string', id: path, key, path, value };
 }
 function bool(key: string | null, path: string, value: boolean): TreeNode {
-  return { kind: 'boolean', key, path, value };
+  return { kind: 'boolean', id: path, key, path, value };
 }
 function nul(key: string | null, path: string): TreeNode {
-  return { kind: 'null', key, path };
+  return { kind: 'null', id: path, key, path };
 }
 
 // --- primitives ---
@@ -240,6 +243,7 @@ describe('inferSchema — stub + ndjson-line expansion via fetchStub', () => {
   test('stub-object: fetcher invoked with byte range, value walked', async () => {
     const tree: TreeNode = {
       kind: 'stub-object',
+      id: '$',
       key: null,
       path: '$',
       byteStart: 10,
@@ -267,8 +271,8 @@ describe('inferSchema — stub + ndjson-line expansion via fetchStub', () => {
 
   test('ndjson-line: each sampled line fetched and merged', async () => {
     const root = arr('$', [
-      { kind: 'ndjson-line', key: '0', path: '$[0]', byteStart: 0, byteEnd: 30 },
-      { kind: 'ndjson-line', key: '1', path: '$[1]', byteStart: 31, byteEnd: 60 },
+      { kind: 'ndjson-line', id: '$[0]', key: '0', path: '$[0]', byteStart: 0, byteEnd: 30 },
+      { kind: 'ndjson-line', id: '$[1]', key: '1', path: '$[1]', byteStart: 31, byteEnd: 60 },
     ]);
     const fetch: FetchStubValue = async (start) => {
       if (start === 0) return { event: 'click', count: 1 };
@@ -291,6 +295,7 @@ describe('inferSchema — stub + ndjson-line expansion via fetchStub', () => {
   test('fetched value can be a deeply nested structure', async () => {
     const tree: TreeNode = {
       kind: 'stub-object',
+      id: '$',
       key: null,
       path: '$',
       byteStart: 0,

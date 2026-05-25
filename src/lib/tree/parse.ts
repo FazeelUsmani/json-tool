@@ -4,14 +4,25 @@
 // documents; replaced by the streaming spine + offset index in W3 so we can
 // handle 500MB without OOM. Same discriminated-union result shape as
 // format.ts and fetchUrl.ts.
+//
+// 2026-05-25: every node carries two parallel string fields per
+// `src/lib/parser/identity.ts`:
+//   - `id`   = JSON Pointer (RFC 6901), used as the key for every
+//              Set/Map/WeakMap tracking node identity. Collision-safe
+//              under any JSON key shape.
+//   - `path` = JSONPath, used purely for display surfaces.
+// Splitting them fixes the correctness bug where keys like `"a.b"`
+// or `"[0]"` collapsed onto the same string as nested structures.
+
+import { ROOT_ID, ROOT_PATH, appendDisplayPath, appendPointer } from '@/lib/parser/identity';
 
 export type TreeNode =
-  | { kind: 'object'; key: string | null; path: string; children: TreeNode[] }
-  | { kind: 'array'; key: string | null; path: string; children: TreeNode[] }
-  | { kind: 'string'; key: string | null; path: string; value: string }
-  | { kind: 'number'; key: string | null; path: string; value: number }
-  | { kind: 'boolean'; key: string | null; path: string; value: boolean }
-  | { kind: 'null'; key: string | null; path: string }
+  | { kind: 'object'; id: string; key: string | null; path: string; children: TreeNode[] }
+  | { kind: 'array'; id: string; key: string | null; path: string; children: TreeNode[] }
+  | { kind: 'string'; id: string; key: string | null; path: string; value: string }
+  | { kind: 'number'; id: string; key: string | null; path: string; value: number }
+  | { kind: 'boolean'; id: string; key: string | null; path: string; value: boolean }
+  | { kind: 'null'; id: string; key: string | null; path: string }
   // W3-Mon: stub variants for the streaming spine parser. Emitted when the
   // parser encounters a composite at depth >= MAX_SPINE_DEPTH; the subtree
   // is not materialized until the user expands it. byteStart/byteEnd point
@@ -25,6 +36,7 @@ export type TreeNode =
   // without materializing the whole subtree. Empty stubs have preview=[].
   | {
       kind: 'stub-object';
+      id: string;
       key: string | null;
       path: string;
       byteStart: number;
@@ -34,6 +46,7 @@ export type TreeNode =
     }
   | {
       kind: 'stub-array';
+      id: string;
       key: string | null;
       path: string;
       byteStart: number;
@@ -48,6 +61,7 @@ export type TreeNode =
   // (v1). In-place subtree expansion lands in [[ndjson-v2]].
   | {
       kind: 'ndjson-line';
+      id: string;
       key: string | null;
       path: string;
       byteStart: number;
@@ -70,34 +84,46 @@ export function parseToTree(text: string): ParseTreeResult {
   }
   try {
     const value = JSON.parse(text);
-    return { ok: true, root: build(value, null, '$') };
+    return { ok: true, root: build(value, null, ROOT_ID, ROOT_PATH) };
   } catch (err) {
     const message = (err as Error).message;
     return { ok: false, error: { message, ...locate(message, text) } };
   }
 }
 
-function build(value: unknown, key: string | null, path: string): TreeNode {
-  if (value === null) return { kind: 'null', key, path };
-  if (typeof value === 'string') return { kind: 'string', key, path, value };
-  if (typeof value === 'number') return { kind: 'number', key, path, value };
-  if (typeof value === 'boolean') return { kind: 'boolean', key, path, value };
+function build(
+  value: unknown,
+  key: string | null,
+  id: string,
+  path: string,
+): TreeNode {
+  if (value === null) return { kind: 'null', id, key, path };
+  if (typeof value === 'string')
+    return { kind: 'string', id, key, path, value };
+  if (typeof value === 'number')
+    return { kind: 'number', id, key, path, value };
+  if (typeof value === 'boolean')
+    return { kind: 'boolean', id, key, path, value };
   if (Array.isArray(value)) {
     return {
       kind: 'array',
+      id,
       key,
       path,
-      children: value.map((v, i) => build(v, String(i), `${path}[${i}]`)),
+      children: value.map((v, i) =>
+        build(v, String(i), appendPointer(id, i), appendDisplayPath(path, i)),
+      ),
     };
   }
   // typeof 'object' && !null && !array → plain object (JSON.parse only emits these)
   const obj = value as Record<string, unknown>;
   return {
     kind: 'object',
+    id,
     key,
     path,
     children: Object.entries(obj).map(([k, v]) =>
-      build(v, k, `${path}.${k}`),
+      build(v, k, appendPointer(id, k), appendDisplayPath(path, k)),
     ),
   };
 }

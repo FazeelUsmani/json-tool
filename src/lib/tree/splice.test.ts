@@ -2,26 +2,29 @@ import { describe, expect, test } from 'vitest';
 import { spliceSubtree } from './splice';
 import type { TreeNode } from './parse';
 
+// splice currently targets by path; id is irrelevant to the test's assertions.
+// Reusing path as id keeps fixtures terse — Phase 4 will migrate to pointer ids.
 function leaf(key: string | null, path: string, value: number): TreeNode {
-  return { kind: 'number', key, path, value };
+  return { kind: 'number', id: path, key, path, value };
 }
 function obj(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): TreeNode {
-  return { kind: 'object', key, path, children };
+  return { kind: 'object', id: path, key, path, children };
 }
 function arr(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): TreeNode {
-  return { kind: 'array', key, path, children };
+  return { kind: 'array', id: path, key, path, children };
 }
 function stub(key: string, path: string): TreeNode {
   return {
     kind: 'stub-object',
+    id: path,
     key,
     path,
     byteStart: 0,
@@ -99,6 +102,7 @@ describe('spliceSubtree', () => {
     // instead of dropping the index label.
     const line: TreeNode = {
       kind: 'ndjson-line',
+      id: '$[7]',
       key: '7',
       path: '$[7]',
       byteStart: 0,
@@ -106,6 +110,7 @@ describe('spliceSubtree', () => {
     };
     const replacement: TreeNode = {
       kind: 'number',
+      id: '$[7]',
       key: null,
       path: '$[7]',
       value: 42,
@@ -125,6 +130,7 @@ describe('spliceSubtree', () => {
     // root that replaces the ndjson-line.
     const line: TreeNode = {
       kind: 'ndjson-line',
+      id: '$[0]',
       key: '0',
       path: '$[0]',
       byteStart: 0,

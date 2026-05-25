@@ -76,11 +76,13 @@ describe('flattenTree', () => {
     // Real stubs come from parse-streaming at depth >= MAX_SPINE_DEPTH.
     const root: TreeNode = {
       kind: 'object',
+      id: '$',
       key: null,
       path: '$',
       children: [
         {
           kind: 'stub-object',
+          id: '$.big',
           key: 'big',
           path: '$.big',
           byteStart: 10,

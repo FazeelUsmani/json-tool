@@ -14,10 +14,10 @@ function obj(
   path: string,
   children: TreeNode[],
 ): TreeNode {
-  return { kind: 'object', key, path, children };
+  return { kind: 'object', id: path, key, path, children };
 }
 function num(key: string | null, path: string, value: number): TreeNode {
-  return { kind: 'number', key, path, value };
+  return { kind: 'number', id: path, key, path, value };
 }
 
 describe('viewStore.setRoot — id preservation', () => {

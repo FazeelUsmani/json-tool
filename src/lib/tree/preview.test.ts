@@ -7,35 +7,37 @@ import type { TreeNode } from './parse';
 type ObjectNode = Extract<TreeNode, { kind: 'object' }>;
 type ArrayNode = Extract<TreeNode, { kind: 'array' }>;
 
+// preview functions inspect kind/value/children only; id-as-path is fine.
 function obj(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): ObjectNode {
-  return { kind: 'object', key, path, children };
+  return { kind: 'object', id: path, key, path, children };
 }
 function arr(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): ArrayNode {
-  return { kind: 'array', key, path, children };
+  return { kind: 'array', id: path, key, path, children };
 }
 function num(key: string | null, path: string, value: number): TreeNode {
-  return { kind: 'number', key, path, value };
+  return { kind: 'number', id: path, key, path, value };
 }
 function str(key: string | null, path: string, value: string): TreeNode {
-  return { kind: 'string', key, path, value };
+  return { kind: 'string', id: path, key, path, value };
 }
 function bool(key: string | null, path: string, value: boolean): TreeNode {
-  return { kind: 'boolean', key, path, value };
+  return { kind: 'boolean', id: path, key, path, value };
 }
 function nul(key: string | null, path: string): TreeNode {
-  return { kind: 'null', key, path };
+  return { kind: 'null', id: path, key, path };
 }
 function stubObj(key: string, path: string): TreeNode {
   return {
     kind: 'stub-object',
+    id: path,
     key,
     path,
     byteStart: 0,
@@ -47,6 +49,7 @@ function stubObj(key: string, path: string): TreeNode {
 function stubArr(key: string, path: string): TreeNode {
   return {
     kind: 'stub-array',
+    id: path,
     key,
     path,
     byteStart: 0,

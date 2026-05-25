@@ -15,6 +15,12 @@
 
 import type { TreeNode } from '@/lib/tree/parse';
 import { buildLineIndex, lineCount } from '@/lib/json/ndjson';
+import {
+  ROOT_ID,
+  ROOT_PATH,
+  appendDisplayPath,
+  appendPointer,
+} from './identity';
 
 export type ParseNdjsonResult = {
   root: TreeNode;
@@ -58,10 +64,12 @@ export async function parseNdjson(blob: Blob): Promise<ParseNdjsonResult> {
     if (contentEnd > start && bytes[contentEnd - 1] === 0x0d) contentEnd--;
     // Skip completely blank lines.
     if (contentEnd === start) continue;
+    const lineIndex = children.length;
     children.push({
       kind: 'ndjson-line',
-      key: String(children.length),
-      path: `$[${children.length}]`,
+      id: appendPointer(ROOT_ID, lineIndex),
+      key: String(lineIndex),
+      path: appendDisplayPath(ROOT_PATH, lineIndex),
       byteStart: start,
       byteEnd: contentEnd,
     });
@@ -69,8 +77,9 @@ export async function parseNdjson(blob: Blob): Promise<ParseNdjsonResult> {
 
   const root: TreeNode = {
     kind: 'array',
+    id: ROOT_ID,
     key: null,
-    path: '$',
+    path: ROOT_PATH,
     children,
   };
   return { root, lineCount: children.length };
