@@ -23,7 +23,10 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 - [x] **`?url=` security hardening** — closed 2026-05-25 (commit `a08133c`). `fetch(url)` now sets `credentials: 'omit'` + `referrerPolicy: 'no-referrer'`; URL parsing rejects non-`http:`/`https:` protocols and any URL carrying userinfo. New error kinds `invalid-protocol` + `userinfo-not-allowed` surfaced through the editor's error pill. (Mahira §5 weakness 3-4)
 
-- [x] **`?url=` auto-fetch leak** — closed 2026-05-25 (slice 3.5). `?url=` is now a pre-fill convenience, not an auto-load command — the user clicks Load to fire the fetch, so destination servers receive a request only on explicit intent. `history.replaceState` strips the param from `window.location` on mount before Plausible's auto-pageview captures it. Closes the "auto-load can leak signed/tokenized URLs to browser history, DOM display, analytics, referrer" finding. (Mahira §5 weakness 2, Action Item §5 #3)
+- [x] **`?url=` auto-fetch leak** — closed 2026-05-25. Two-part fix:
+  - **No auto-fetch (slice 3.5):** `?url=` is now a pre-fill convenience, not an auto-load command — the user clicks Load to fire the fetch, so destination servers receive a request only on explicit intent.
+  - **Synchronous strip before Plausible (commit `ddbfeef`):** the param-strip lives in an inline `<head>` script that runs during HTML parse, **before** the deferred Plausible script queues. (The initial slice-3.5 React-useEffect strip ran too late — Plausible's auto-pageview captured `window.location.href` before React mounted, leaking the param to analytics. Caught during the post-slice-4 review.) The original `?url=` value is stashed on `document.documentElement.dataset.pendingUrl` for `EditorToolbar` to read on mount for the input pre-fill.
+  - Closes the "auto-load can leak signed/tokenized URLs to browser history, DOM display, analytics, referrer" finding. (Mahira §5 weakness 2, Action Item §5 #3)
 
 ### Privacy / claim alignment
 
@@ -81,6 +84,11 @@ These are correctness / claim-alignment items that would either (a) break for re
 - [ ] **NDJSON indexing in worker** — currently main-thread (~200ms allocation + ~100ms scan on 200MB). Acceptable today; worker offload deferred.
 - [ ] **Incremental / segmented flatten** — `FlatRow[]` is rebuilt on every parse + every stub expand. Largest measured case (2.25M rows at 505MB) still works; defer until profiling shows a regression. Worth tracking so a future fixture doesn't surprise us. (Mahira §2 Suggested Improvement #6)
 - [ ] **Remove dompurify override** — currently forced to `^3.4.5` via `package.json` `overrides` (slice 4 close-out, 2026-05-25). Drop the override when Monaco ships a stable release bundling `dompurify >= 3.4.0` upstream. Track via `npm view monaco-editor dependencies` periodically; see `docs/dependency-overrides.md` for the full revert checklist. (Same applies to the `qs ^6.15.2` override — drop once shadcn / express bump their pins.)
+- [ ] **Identity consistency pass** — surfaced by the post-slice-4 review (2026-05-25). After the Phase 3 identity migration (`c05d030`) and the follow-on TablePane fix (`ddbfeef`), two sites still use the legacy `path` keying. Both dormant today:
+  - `parse-streaming.ts` `arrayLengths` Map is keyed by `frame.path` / `stub.path`; `sample-index.ts` `keepEntry` finds the first `[` to locate the array bracket. For arrays under bracket-quoted unsafe keys (`$["a.b"][42]`), the slice misidentifies the bracket and the lookup misses — sampler over-keeps, no crash. Same bug shape as the closed TablePane peek.
+  - `ByteIndexEntry` tuple is `[path, range]`. No current consumers other than `sample-index.ts`; future reverse byte-offset lookups would resurface the same class of bug. Cheap to migrate now while there are zero downstream callers.
+  - Type-system tightening: introduce a branded `PointerId` (or `JsonPath`) string type so the compiler catches future "called with the wrong identity" sites that today pass silently. Both `node.id` and `node.path` are bare `string` — TypeScript can't flag the misuse.
+  - Bundle as one slice: ~1-2 hours. Add a regression test using a fixture with an array under an unsafe key (extend `pathological-keys.json` or sibling fixture).
 - [ ] **Large-file splits**: TreeNode (566), parse-streaming (538), TreeView (501), TablePane (478). (Mahira §2 weakness, §3 weakness 1)
 
 ### Code-reuse cleanup
