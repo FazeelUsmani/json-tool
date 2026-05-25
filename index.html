@@ -8,6 +8,40 @@
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <!-- Title + meta description are injected per-route via vite-react-ssg's <Head>. -->
     <script src="/theme-init.js"></script>
+    <!--
+      Synchronous ?url= strip — MUST execute before the Plausible
+      script tag below. Plausible's auto-pageview event captures
+      window.location.href at script-load time; if `?url=...` is
+      still in the bar at that moment, the param leaks to analytics
+      (also to browser history + referrer chain on outbound nav).
+      Slice 3.5's React-side strip ran too late — it lives in
+      useEffect, which fires AFTER React mount AND AFTER Plausible's
+      pageview. This inline script runs synchronously during HTML
+      parsing, before Plausible's deferred script even queues.
+
+      We stash the value on document.documentElement.dataset so
+      EditorToolbar's useEffect can still pre-fill the URL input
+      (the "?url= as convenience pre-fill" UX from slice 3.5).
+      Closes Mahira §5 weakness 2 properly. See
+      launch-readiness-gate.md.
+    -->
+    <script>
+      (function () {
+        try {
+          var u = new URL(window.location.href);
+          var pending = u.searchParams.get('url');
+          if (pending != null) {
+            document.documentElement.dataset.pendingUrl = pending;
+            u.searchParams.delete('url');
+            window.history.replaceState({}, '', u.toString());
+          }
+        } catch (_) {
+          /* If URL parsing fails for any reason, fall through —
+             leak risk is acceptable because we couldn't read the
+             param in the first place. */
+        }
+      })();
+    </script>
     <!-- Plausible analytics. Replace data-domain with the CF Pages preview
          subdomain (e.g. "json-tool-xyz.pages.dev") after dashboard connect;
          until then Plausible silently drops events as unknown property. -->

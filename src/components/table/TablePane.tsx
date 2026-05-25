@@ -461,7 +461,10 @@ function getCellValueFromCache(
     // The sort-click handler awaits fetchRowValue for every row
     // BEFORE setting sortState, so by the time this runs every
     // stub should be cached.
-    const cached = peekRowCache(blob, node.path);
+    // Cache is keyed by node.id (RFC 6901 pointer); using node.path
+    // here silently misses every stub-backed row → null-at-end sort
+    // → broken order. Missed in the c05d030 identity migration.
+    const cached = peekRowCache(blob, node.id);
     if (cached === undefined) return undefined;
     if (key === VALUE_COLUMN_KEY) return cached;
     return (cached as Record<string, unknown> | null)?.[key];

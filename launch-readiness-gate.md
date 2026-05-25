@@ -52,7 +52,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 ### Tests
 
-- [ ] **Playwright e2e smoke** — drop small JSON, viewer-only large file, search, stub expand, repair, schema, table, SEO routes. No e2e currently. **~4-6 hours.** (Mahira §4 weakness 3, Top 10 #2)
+- [ ] **Playwright e2e smoke** — drop small JSON, viewer-only large file, search, stub expand, repair, schema, table, SEO routes. No e2e currently. **~4-6 hours.** (Mahira §4 weakness 3, Top 10 #2) **Must pin two specific regressions from 2026-05-25:** (i) TablePane sort on a stub-backed table — verify rows aren't all collapsed to the null-at-end bucket (caught manually as the `peek by node.path` vs `node.id` bug); (ii) `?url=` strip ordering — assert Plausible's outbound network event captures `window.location` AFTER the `?url=` param has been removed (caught manually as the React-useEffect-runs-after-defer-script ordering bug).
 - [ ] **Component-level tests** — TablePane, SchemaPane, EmptyStateHero, RepairDialog, MemoryHud, useDebugFlag currently have zero React-side test coverage. Logic tests (parser/tree/schema/sort/columns) are excellent; UI is uncovered. **~half day** for the core flows.
 - [ ] **Worker boundary tests** — Comlink, abort, supersede, search batches, worker failure paths. (Mahira §4 weakness 4)
 
