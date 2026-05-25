@@ -11,8 +11,9 @@
 // first). Side-by-side mode is the idiomatic diff-review shape for
 // developers. Zero new bundle dependency.
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import type { editor } from 'monaco-editor';
 import {
   Dialog,
   DialogContent,
@@ -50,12 +51,39 @@ export function RepairDialog({
   onCancel,
 }: Props) {
   const isDark = useDarkClass();
+  const editorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
+
+  // Detach Monaco's TextModels BEFORE React unmounts the DiffEditor on
+  // close. Without this, `@monaco-editor/react`'s effect cleanup
+  // disposes the underlying models, then Monaco's DiffEditorWidget
+  // event-listener cleanup tries to read those (now-disposed) models
+  // and fires the unhandled error `TextModel got disposed before
+  // DiffEditorWidget model got reset` on every close cycle (Apply or
+  // Cancel). setModel(null) clears the widget's model pointer first,
+  // so the subsequent dispose path has nothing to dereference.
+  //
+  // Called synchronously from the close handlers below — must run
+  // BEFORE the parent flips `open` to false, otherwise React's
+  // re-render unmounts the DiffEditor before this code can fire.
+  const detachEditorModels = () => {
+    editorRef.current?.setModel(null);
+    editorRef.current = null;
+  };
+
+  const handleCancel = () => {
+    detachEditorModels();
+    onCancel();
+  };
+  const handleApply = () => {
+    detachEditorModels();
+    onApply();
+  };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onCancel();
+        if (!next) handleCancel();
       }}
     >
       <DialogContent className="flex max-h-[85vh] flex-col gap-3 sm:max-w-4xl">
@@ -83,6 +111,9 @@ export function RepairDialog({
                 original={before}
                 modified={after}
                 theme={isDark ? 'vs-dark' : 'vs'}
+                onMount={(diffEditor) => {
+                  editorRef.current = diffEditor;
+                }}
                 options={{
                   readOnly: true,
                   renderSideBySide: true,
@@ -97,10 +128,10 @@ export function RepairDialog({
           </Suspense>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button onClick={onApply}>Apply repair</Button>
+          <Button onClick={handleApply}>Apply repair</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
