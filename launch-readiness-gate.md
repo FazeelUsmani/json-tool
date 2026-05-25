@@ -123,6 +123,69 @@ Once hard blockers are closed and the brand domain is live, run this checklist o
 
 ---
 
+## Smoke protocols
+
+Manual validation steps that close out a hard-blocker fix once the unit tests are green. Run on `pnpm/npm run build && npm run preview` — dev mode adds React strict-mode double-invokes that mask split-state bugs.
+
+### Path-IDs collision fix smoke (commits `c05d030` + `520692c`)
+
+Model-layer identity is locked by the 12 vitest cases in `src/lib/parser/pathological-keys.test.ts`. This protocol validates the React + viewStore layer those tests don't reach — collapse Set, drawer, search, copy-path, all keyed by the new pointer ids.
+
+**Setup (~2 min)**
+
+1. `npm run build && npm run preview` — note the local URL
+2. Open in Chrome. DevTools → Application → Service Workers → tick **Update on reload**. Hard-reload once.
+3. Append `?debug=1` to the URL for the Memory HUD.
+
+**Render check (~1 min)**
+
+1. Drag-drop `src/lib/parser/__fixtures__/pathological-keys.json` into the editor pane.
+2. Expect: tree pane renders 12 top-level keys (including the empty-string one), nested `{a:{b}}`, and `arr` of 2 elements.
+3. HUD: Parse < 50 ms, zero console errors.
+
+**Collision-case checks (~5 min)** — **primary validation**
+
+1. **Dot key vs nested structure.** Expand the `"a"` row → see child `"b"`. Now collapse the `"a.b"` row.
+   - Pass: `"a.b"` shows `{...}` / collapsed, `"a"."b"` stays visible.
+   - Fail (regression): both collapse together, or only one rows out.
+
+2. **Bracket key vs array index.** Expand `"arr"` → see `arr[0] = 3.5`. Collapse the `"[0]"` row.
+   - Pass: `"[0]"` collapses; `arr[0]` stays visible.
+
+3. **Slash + tilde.** Expand `"~contains/slash"` is leaf (number 7) — click its info button → drawer opens. Path field reads `$["~contains/slash"]` (display, not the `/~0contains~1slash` pointer).
+
+4. **Empty key.** Click row for `""` → drawer Path reads `$[""]`. Copy button → paste into a scratch buffer → expect exactly `$[""]`. Pointer id `/` MUST NOT appear in user-visible text.
+
+**Display surfaces (~1 min)** — proves Phase-5 absorption
+
+1. Focus the `"a.b"` row, press `c` → toast description reads `$["a.b"]`. Clipboard paste → `$["a.b"]`.
+2. Focus the `"[0]"` row, press `c` → toast / clipboard read `$["[0]"]`.
+3. Anywhere a `/a.b` or `/[0]` (pointer form) appears in UI text → fail (Phase 5 incomplete).
+
+**Search (~2 min)**
+
+1. Type `slash` in search — both `"has/slash"` and `"~contains/slash"` highlight by key match. Ancestor chain visible.
+2. Type `~` — `"~with~tildes"` + `"~contains/slash"` highlight.
+3. Clear, type `7` — `"~contains/slash": 7` highlights via value match.
+
+**Numbers to capture**
+
+- HUD Parse: ___ ms
+- HUD leaves: ___
+- Console errors: should be 0
+- Copy-path clipboard exact values for `a.b` / `[0]` / empty-key (paste into the smoke log)
+
+**Pass criteria (all must hold)**
+
+- Every collision pair above keeps distinct collapse state.
+- Every display surface shows JSONPath (`$.*` / `$["..."]`), never the pointer form (`/...`).
+- Search finds key-matches in pathological keys.
+- Zero console errors during the run.
+
+If any fail: do NOT mark the hard-blocker closed — file the specific failure mode and re-open the relevant phase (3 if collapse state regressed, 5 if display surface leaked a pointer).
+
+---
+
 ## What this document is NOT
 
 - **Not the build verification list.** That's PLAN.MD lines 411-469.
