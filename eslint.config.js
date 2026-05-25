@@ -12,7 +12,19 @@ export default defineConfig([
   // `benchmarks/` is dev-only scripts + a `SMOKE=1`-gated test; not
   // in the production tsconfig project, so the type-aware lint
   // rules would error on parse. Excluded for the same reason as spikes.
-  globalIgnores(['dist', 'spikes/**', 'benchmarks/**']),
+  globalIgnores([
+    'dist',
+    'spikes/**',
+    'benchmarks/**',
+    // Playwright e2e: lives outside the production tsconfig project;
+    // Playwright's own type-resolution handles these files. Excluding
+    // from the type-aware ESLint pass for the same reason as
+    // benchmarks/.
+    'e2e/**',
+    'playwright.config.ts',
+    'playwright-report/**',
+    'test-results/**',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

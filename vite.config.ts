@@ -1,4 +1,10 @@
-import { defineConfig } from 'vite'
+// Importing defineConfig from 'vitest/config' instead of 'vite' lets
+// the same exported config carry vitest's `test` field with full TS
+// types (a plain `import 'vite'` would type-error on the `test:` key).
+// The runtime config is identical; vitest reads `test`, vite ignores
+// it. The alternative — a separate vitest.config.ts — would have to
+// re-import + re-apply the plugin pipeline, which is brittle.
+import { defineConfig } from 'vitest/config'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -67,6 +73,17 @@ export default defineConfig(({ isSsrBuild }) => ({
   },
   worker: {
     format: 'es',
+  },
+  test: {
+    // Keep Playwright e2e specs (same `.spec.ts` extension) out of
+    // vitest's discovery. test:e2e runs them via `playwright test`.
+    exclude: [
+      'node_modules/**',
+      'dist/**',
+      'e2e/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
   },
   build: {
     rollupOptions: {

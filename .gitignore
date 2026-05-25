@@ -16,6 +16,11 @@ dist-ssr
 benchmarks/corpus/
 benchmarks/dev-*.json
 
+# Playwright artifacts
+playwright-report/
+test-results/
+playwright/.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -85,6 +85,14 @@ git log carries the per-commit detail.
   receive a paste event when the editor is truly empty. Listener
   short-circuits if any input is focused so it doesn't hijack future
   search bars or URL fields.
+- **Playwright skeleton + 2 regression pins** — `playwright.config.ts`
+  + `e2e/` folder with `smoke.spec.ts` (sample-mount happy path) and
+  `regressions/` for the TablePane peek-by-`node.path` and `?url=`
+  Plausible-ordering bugs caught earlier today. CI wired as on-demand
+  workflow (`.github/workflows/e2e.yml`, `workflow_dispatch` only)
+  with Playwright browser-cache keyed on `package-lock.json`. Full
+  Mahira §4 e2e surface (file drop, viewer-only, search, repair,
+  schema, SEO, PWA) is the follow-up slice — gate doc updated.
 
 ### Measured
 

@@ -55,7 +55,13 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 ### Tests
 
-- [ ] **Playwright e2e smoke** — drop small JSON, viewer-only large file, search, stub expand, repair, schema, table, SEO routes. No e2e currently. **~4-6 hours.** (Mahira §4 weakness 3, Top 10 #2) **Must pin two specific regressions from 2026-05-25:** (i) TablePane sort on a stub-backed table — verify rows aren't all collapsed to the null-at-end bucket (caught manually as the `peek by node.path` vs `node.id` bug); (ii) `?url=` strip ordering — assert Plausible's outbound network event captures `window.location` AFTER the `?url=` param has been removed (caught manually as the React-useEffect-runs-after-defer-script ordering bug).
+- [~] **Playwright e2e smoke** — **skeleton + 2 regression pins shipped 2026-05-25** (Playwright config + on-demand CI workflow + 3 specs in `e2e/`):
+  - `e2e/smoke.spec.ts` — cold-load → click Telemetry sample → tree pane populates
+  - `e2e/regressions/tablepane-sort.spec.ts` — pins the TablePane peek-by-`node.path` bug from `ddbfeef` via a synthetic 20-line NDJSON fixture (served by `page.route()`, not in `public/`); clicks the score column header and asserts ascending order is real, not the null-at-end clump
+  - `e2e/regressions/url-strip-ordering.spec.ts` — pins the `?url=` Plausible ordering bug from `ddbfeef`: (i) asserts the address bar is clean post-load, (ii) intercepts `plausible.io/js/script.js` with a stand-in that captures `window.location` at the moment of script-eval (= when the real Plausible would have read it for pageview), (iii) asserts the URL input is pre-filled with the original value so the slice-3.5 UX still works.
+  - CI integration: `.github/workflows/e2e.yml` runs on `workflow_dispatch` only (not on push/PR) — Playwright's ~150MB browser install + ~3-5min runtime would inflate the main CI gate. Promote to on-PR once the suite is proven stable. Browser cache keyed on `package-lock.json` to skip the install on stable dep runs.
+  - **Still pending** for full Mahira §4 surface (the original "~4-6h" scope, queued as a follow-up): file-drop happy path, viewer-only large file, search, stub expansion + cancel, JSON repair dialog apply/cancel, schema first-click infer + staleness dot, SEO route render, PWA install behavior.
+  - (Mahira §4 weakness 3, Top 10 #2)
 - [ ] **Component-level tests** — TablePane, SchemaPane, EmptyStateHero, RepairDialog, MemoryHud, useDebugFlag currently have zero React-side test coverage. Logic tests (parser/tree/schema/sort/columns) are excellent; UI is uncovered. **~half day** for the core flows.
 - [ ] **Worker boundary tests** — Comlink, abort, supersede, search batches, worker failure paths. (Mahira §4 weakness 4)
 
