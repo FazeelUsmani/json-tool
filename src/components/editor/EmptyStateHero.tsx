@@ -6,18 +6,26 @@
 // `onDrop` already wraps this area), so dropping a file anywhere on
 // the hero fires the existing pipeline — no separate handler needed.
 //
-// Click-to-paste flow: clicking the hero focuses the parent container
-// + when isEmpty becomes false (user starts typing in Monaco after
-// the swap), the hero unmounts naturally. We don't add an explicit
-// "Cmd+V to paste" hint — the headline already says "or paste text
-// to begin" and the click-to-focus path is discoverable. Extra
-// instruction clutters the hero with redundancy.
+// Paste-from-empty flow (2026-05-25): a window-level paste listener
+// lives in this component while the hero is mounted. Cmd+V / Ctrl+V
+// anywhere on the page pipes the clipboard text into documentStore
+// (kind:'paste'), which mounts Monaco with the content and unmounts
+// this hero in the same render. Without this, the headline's
+// "or paste text to begin" promise was broken — Monaco doesn't exist
+// yet to receive a paste event when truly empty.
+//
+// Listener guards against hijacking paste from focused inputs (future
+// search bars, etc.) by short-circuiting when `document.activeElement`
+// is anything other than body/html. Once Monaco mounts, this hero
+// unmounts, the listener is removed, and Monaco's own paste handler
+// takes over.
 //
 // Sample buttons load inline JS-string content via setText with
 // `{ kind: 'sample', name, size }` — DocumentSource shape matches
 // the existing file / url / paste pipeline so the source chip in
 // the toolbar and parse routing both work without special-casing.
 
+import { useEffect } from 'react';
 import { FileJson } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SAMPLES, type Sample } from '@/lib/samples/samples';
@@ -25,6 +33,28 @@ import { useDocumentStore } from '@/state/documentStore';
 
 export function EmptyStateHero() {
   const setText = useDocumentStore((s) => s.setText);
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      // Don't hijack paste targeted at any focused input (future
+      // search bars, URL field, etc.). When nothing is focused the
+      // activeElement is body — that's when the paste is "free".
+      const active = document.activeElement;
+      if (
+        active &&
+        active !== document.body &&
+        active !== document.documentElement
+      ) {
+        return;
+      }
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text) return;
+      e.preventDefault();
+      setText(text, { kind: 'paste' });
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [setText]);
 
   const loadSample = (sample: Sample) => {
     setText(sample.content, {

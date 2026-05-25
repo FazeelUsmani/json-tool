@@ -77,6 +77,14 @@ git log carries the per-commit detail.
   the `TextModel got disposed before DiffEditorWidget model got
   reset` console error that fired on every close cycle. Pre-existing
   bug surfaced during slice 4 browser smoke.
+- **EmptyStateHero paste handler** — window-level `paste` listener
+  while the empty-state hero is mounted pipes the clipboard text
+  into `documentStore` (`kind:'paste'`), mounting Monaco with the
+  pasted content. Without this, the "or paste text to begin" copy
+  promised behavior that didn't work — Monaco doesn't exist yet to
+  receive a paste event when the editor is truly empty. Listener
+  short-circuits if any input is focused so it doesn't hijack future
+  search bars or URL fields.
 
 ### Measured
 
