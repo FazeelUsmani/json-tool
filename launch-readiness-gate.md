@@ -19,9 +19,9 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 - [ ] **Internal path-IDs collision** — `parse-streaming.ts` / `parse.ts` build identity as `${path}.${key}`. Real-world keys containing `.`, `[`, `]`, or duplicate keys produce ID collisions → breaks collapse state, focus restoration, drawer restoration, search match indices, and splice targeting. Fix: switch internal identity to JSON Pointer or generated node IDs; display JSONPath separately. **~4-6 hours.** (Mahira §2 weakness 2, Red Flag #5)
 
-- [ ] **`?url=` streaming gap** — `fetchUrl.ts` uses `response.text()`; full string materialized on main thread. 500 MB URL load is *claimed* (since the 2026-05-22 cap bump) but architecturally not supported. Either (a) implement `response.body.getReader()` with byte-cap during stream → Blob → route through worker, or (b) revert cap to a realistic number and adjust hero copy. **~3-4 hours for (a).** (Mahira §2 weakness 1, Red Flag #2; this session's own diagnostic miss)
+- [x] **`?url=` streaming gap** — closed 2026-05-25 (commit `a08133c`). `fetchUrl` now streams `response.body.getReader()` and enforces `maxBytes` during read; on overflow it cancels the reader and returns `too-large`. Returns a `Blob` so the parser worker reads via `blob.stream()` end-to-end without main-thread string materialization. `EditorToolbar` mirrors file-drop dispatch (under `VIEWER_ONLY_THRESHOLD` decodes for Monaco + carries the Blob; over threshold goes viewer-only). (Mahira §2 weakness 1, Red Flag #2; this session's own diagnostic miss)
 
-- [ ] **`?url=` security hardening** — current `fetch(url)` does not set `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`, or restrict protocols. Userinfo URLs not rejected. Fix bundled with the streaming refactor above. (Mahira §5 weakness 3-4)
+- [x] **`?url=` security hardening** — closed 2026-05-25 (commit `a08133c`). `fetch(url)` now sets `credentials: 'omit'` + `referrerPolicy: 'no-referrer'`; URL parsing rejects non-`http:`/`https:` protocols and any URL carrying userinfo. New error kinds `invalid-protocol` + `userinfo-not-allowed` surfaced through the editor's error pill. (Mahira §5 weakness 3-4)
 
 ### Privacy / claim alignment
 

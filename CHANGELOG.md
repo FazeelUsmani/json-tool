@@ -47,6 +47,14 @@ git log carries the per-commit detail.
 - **Pathological-keys regression fixture** — 12 cases proving keys
   with `.`, `[`, `]`, `/`, `~`, empty string produce distinct ids;
   pins the identity refactor.
+- **`?url=` streaming + security hardening** — `fetchUrl` reads
+  `response.body.getReader()` and enforces `maxBytes` during read,
+  returning a `Blob` that the parser worker consumes via
+  `blob.stream()` end-to-end. Adds `http:`/`https:`-only allowlist,
+  rejects userinfo URLs, sets `credentials: 'omit'` +
+  `referrerPolicy: 'no-referrer'`. EditorToolbar mirrors the
+  file-drop dispatch so 500MB URL loads behave the same as 500MB
+  drops. Closes Mahira Red Flags #2 + #3.
 
 ### Measured
 
@@ -82,7 +90,9 @@ git log carries the per-commit detail.
 
 ### Deferred
 
-- `?url=` streaming + security hardening (audit slice 3, ~3-4h).
+- `?url=` auto-fetch confirmation (Mahira §5 #3) — separate UX design
+  pass; the right answer might be pre-fill-then-click, not a banner.
+  Queued as slice 3.5.
 - Monaco / dompurify breaking upgrade (audit slice 4, ~2-4h).
 - Branch protection flip on `main` (your GitHub-side action).
 - README rewrite — currently default Vite boilerplate (~1-2h).
