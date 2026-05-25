@@ -89,7 +89,7 @@ These are correctness / claim-alignment items that would either (a) break for re
   - `ByteIndexEntry` tuple is `[path, range]`. No current consumers other than `sample-index.ts`; future reverse byte-offset lookups would resurface the same class of bug. Cheap to migrate now while there are zero downstream callers.
   - Type-system tightening: introduce a branded `PointerId` (or `JsonPath`) string type so the compiler catches future "called with the wrong identity" sites that today pass silently. Both `node.id` and `node.path` are bare `string` — TypeScript can't flag the misuse.
   - Bundle as one slice: ~1-2 hours. Add a regression test using a fixture with an array under an unsafe key (extend `pathological-keys.json` or sibling fixture).
-- [ ] **Large-file splits**: TreeNode (566), parse-streaming (538), TreeView (501), TablePane (478). (Mahira §2 weakness, §3 weakness 1)
+- [ ] **Large-file splits** — TreeNode (566), parse-streaming (588), TreeView (510), TablePane (509). **Deferred until Playwright e2e suite lands.** Reason: these are React orchestration files where behavior emerges from useEffect ordering + state interactions. Refactoring without integration test coverage risks the silent-render-reorder bug class — exactly the shape of the two regressions caught manually on 2026-05-25 (TablePane peek-by-path, Plausible ordering). Mahira §2 weakness + §3 Suggested Improvement #1 conditioned this on "after adding integration tests." Sequencing: Playwright suite first, then the refactor. (Mahira §2 weakness, §3 Suggested Improvement #1)
 
 ### Code-reuse cleanup
 
