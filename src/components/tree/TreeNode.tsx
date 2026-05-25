@@ -78,7 +78,7 @@ function OpenRow({
   return (
     <Row
       pad={pad(row.depth)}
-      path={row.id}
+      path={row.node.path}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={() => toggle(row.id)}
@@ -176,7 +176,7 @@ function StubRow({
       query: s.query,
       openDrawer: s.openDrawer,
       setFocusedIndex: s.setFocusedIndex,
-      isExpanding: s.expandingPaths.has(row.id),
+      isExpanding: s.expandingIds.has(row.id),
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
@@ -202,7 +202,7 @@ function StubRow({
   return (
     <Row
       pad={pad(row.depth)}
-      path={row.id}
+      path={row.node.path}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={isExpanding ? undefined : () => void expand(row)}
@@ -282,7 +282,7 @@ function LineRow({
       query: s.query,
       openDrawer: s.openDrawer,
       setFocusedIndex: s.setFocusedIndex,
-      isExpanding: s.expandingPaths.has(row.id),
+      isExpanding: s.expandingIds.has(row.id),
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
@@ -306,7 +306,7 @@ function LineRow({
   return (
     <Row
       pad={pad(row.depth)}
-      path={row.id}
+      path={row.node.path}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={isExpanding ? undefined : () => void expand(row)}
@@ -347,7 +347,7 @@ function LeafRow({
     return (
       <Row
         pad={pad(row.depth)}
-        path={row.id}
+        path={row.node.path}
         isFocused={isFocused}
         onFocus={() => setFocusedIndex(flatIdx)}
         onShowDetail={() => openDrawer(row)}
@@ -364,7 +364,7 @@ function LeafRow({
   return (
     <Row
       pad={pad(row.depth)}
-      path={row.id}
+      path={row.node.path}
       isFocused={isFocused}
       onFocus={() => setFocusedIndex(flatIdx)}
       onShowDetail={() => openDrawer(row)}

@@ -69,7 +69,7 @@ export function TreeView() {
   const addStubSearchMatches = useViewStore((s) => s.addStubSearchMatches);
   const setStubSearchProgress = useViewStore((s) => s.setStubSearchProgress);
   const clearStubSearch = useViewStore((s) => s.clearStubSearch);
-  const expandingPaths = useViewStore((s) => s.expandingPaths);
+  const expandingIds = useViewStore((s) => s.expandingIds);
   const setExpanding = useViewStore((s) => s.setExpanding);
   const expandStubRow = useStubExpansion();
   const [parseError, setParseError] = useState<ParseTreeError | null>(null);
@@ -262,7 +262,7 @@ export function TreeView() {
     searchStubs(sourceBlob, ranges, query, (batch, scanned) => {
       if (cancelled) return;
       if (batch.length > 0) {
-        addStubSearchMatches(batch.map((b) => b.path));
+        addStubSearchMatches(batch.map((b) => b.id));
       }
       // Clear progress directly on the terminal tick instead of waiting
       // for the worker's Promise to resolve via `.then` below — the
@@ -385,8 +385,8 @@ export function TreeView() {
     openDrawer,
     containerRef,
     expandStubRow,
-    expandingPaths,
-    clearExpanding: (path) => setExpanding(path, false),
+    expandingIds,
+    clearExpanding: (id) => setExpanding(id, false),
   });
 
   // Empty-flat states: distinguish "truly nothing loaded" from

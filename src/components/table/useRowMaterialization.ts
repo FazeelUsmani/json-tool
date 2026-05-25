@@ -97,23 +97,23 @@ export async function fetchRowValue(
   if (!blob) {
     throw new Error('fetchRowValue: stub/line node requires a source blob');
   }
-  const cached = getCachedRow(blob, node.path);
+  const cached = getCachedRow(blob, node.id);
   if (cached !== undefined) return cached;
-  let loader = getLoader(blob, node.path);
+  let loader = getLoader(blob, node.id);
   if (!loader) {
     loader = blob
       .slice(node.byteStart, node.byteEnd)
       .text()
       .then((text) => JSON.parse(text) as unknown);
-    setLoader(blob, node.path, loader);
+    setLoader(blob, node.id, loader);
   }
   try {
     const value = await loader;
-    setCachedRow(blob, node.path, value);
-    clearLoader(blob, node.path);
+    setCachedRow(blob, node.id, value);
+    clearLoader(blob, node.id);
     return value;
   } catch (err) {
-    clearLoader(blob, node.path);
+    clearLoader(blob, node.id);
     throw err;
   }
 }
@@ -165,11 +165,11 @@ export function useRowMaterialization(
 
   // Derived-state-from-props reset: react-window reuses the same
   // component instance for different rows as the user scrolls.
-  // When `node.path` changes, re-derive the state synchronously
+  // When `node.id` changes, re-derive the state synchronously
   // so we don't briefly render the previous row's data.
-  const [prevPath, setPrevPath] = useState(node.path);
-  if (prevPath !== node.path) {
-    setPrevPath(node.path);
+  const [prevId, setPrevId] = useState(node.id);
+  if (prevId !== node.id) {
+    setPrevId(node.id);
     setState(computeInitialState(sourceBlob, node));
   }
 
@@ -209,7 +209,7 @@ function computeInitialState(
   if (!blob) {
     return { kind: 'error', message: 'No source blob available for stub row' };
   }
-  const cached = getCachedRow(blob, node.path);
+  const cached = getCachedRow(blob, node.id);
   if (cached !== undefined) return { kind: 'ready', value: cached };
   return { kind: 'loading' };
 }

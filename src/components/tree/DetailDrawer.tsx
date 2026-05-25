@@ -53,7 +53,9 @@ function Body({ row }: { row: FlatRow }) {
   if (row.kind === 'close') return null;
 
   const node = row.node;
-  const path = row.id;
+  // Display path (JSONPath), not the pointer id — the drawer Path
+  // section is the user-facing "where am I in the tree" affordance.
+  const path = row.node.path;
   const typeLabel = nodeTypeLabel(node);
 
   return (
@@ -133,7 +135,7 @@ function PrimitiveBody({ node }: { node: TreeNode }) {
 }
 
 function StubBody({ row }: { row: Extract<FlatRow, { kind: 'stub' }> }) {
-  const isExpanding = useViewStore((s) => s.expandingPaths.has(row.id));
+  const isExpanding = useViewStore((s) => s.expandingIds.has(row.id));
   const expand = useStubExpansion();
   const node = row.node;
   const childLabel =

@@ -72,15 +72,15 @@ describe('findMatches', () => {
     const r = findMatches(f, '80');
     // The "port" leaf should match because String(8080) contains "80"
     expect(r.matchIndices).toHaveLength(1);
-    expect(f[r.matchIndices[0]].id).toBe('$.port');
+    expect(f[r.matchIndices[0]].id).toBe('/port');
   });
 
   test('match on boolean value', () => {
     const f = flat('{"active":true,"inactive":false}');
     const r = findMatches(f, 'true');
-    // Only $.active matches: true. $.inactive holds false → no match.
+    // Only /active matches: true. /inactive holds false → no match.
     const ids = r.matchIndices.map((i) => f[i].id);
-    expect(ids).toEqual(['$.active']);
+    expect(ids).toEqual(['/active']);
   });
 
   test('null value is NOT matched by literal "null"', () => {
@@ -94,7 +94,7 @@ describe('findMatches', () => {
     const f = flat('{"User":"Alice"}');
     const r = findMatches(f, 'USER');
     expect(r.matchIndices).toHaveLength(1);
-    expect(f[r.matchIndices[0]].id).toBe('$.User');
+    expect(f[r.matchIndices[0]].id).toBe('/User');
   });
 
   test('two matches in different subtrees both pull in their ancestors', () => {
@@ -175,9 +175,9 @@ describe('findMatches', () => {
     // though the match was specifically on `meta`. The walk pulls in the
     // tags array, the "a" element inside it, and the score leaf.
     const visibleIds = new Set([...r.visibleSet].map((i) => f[i].id));
-    expect(visibleIds.has('$.meta.tags')).toBe(true);
-    expect(visibleIds.has('$.meta.tags[0]')).toBe(true);
-    expect(visibleIds.has('$.meta.score')).toBe(true);
+    expect(visibleIds.has('/meta/tags')).toBe(true);
+    expect(visibleIds.has('/meta/tags/0')).toBe(true);
+    expect(visibleIds.has('/meta/score')).toBe(true);
     expect([...r.visibleSet].sort((a, b) => a - b)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);
@@ -247,9 +247,9 @@ describe('collectStubRanges', () => {
     };
     const ranges = collectStubRanges(root);
     expect(ranges).toEqual([
-      { path: '$.a', byteStart: 10, byteEnd: 50 },
-      { path: '$.events[0]', byteStart: 60, byteEnd: 80 },
-      { path: '$.events[1]', byteStart: 90, byteEnd: 110 },
+      { id: '$.a', byteStart: 10, byteEnd: 50 },
+      { id: '$.events[0]', byteStart: 60, byteEnd: 80 },
+      { id: '$.events[1]', byteStart: 90, byteEnd: 110 },
     ]);
   });
 

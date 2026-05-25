@@ -11,8 +11,8 @@
 // don't match (no semantic content).
 //
 // W3-Thu+ deep matches: when `stubSearchMatches` is provided, any stub or
-// ndjson-line row whose path is in the set is also counted as a match.
-// That path comes from the worker's searchStubs scan — it sees content
+// ndjson-line row whose pointer id is in the set is also counted as a match.
+// That id comes from the worker's searchStubs scan — it sees content
 // inside collapsed stubs that the sync FlatRow walk can't reach. Folded
 // into the same matchIndices array so the existing N/M count + jump-to-
 // next-match UX absorbs deep matches without a parallel data structure.
@@ -31,8 +31,8 @@ import type { TreeNode } from './parse';
  */
 export function collectStubRanges(
   root: TreeNode | null,
-): { path: string; byteStart: number; byteEnd: number }[] {
-  const out: { path: string; byteStart: number; byteEnd: number }[] = [];
+): { id: string; byteStart: number; byteEnd: number }[] {
+  const out: { id: string; byteStart: number; byteEnd: number }[] = [];
   if (!root) return out;
   walk(root, out);
   return out;
@@ -40,7 +40,7 @@ export function collectStubRanges(
 
 function walk(
   node: TreeNode,
-  out: { path: string; byteStart: number; byteEnd: number }[],
+  out: { id: string; byteStart: number; byteEnd: number }[],
 ): void {
   if (
     node.kind === 'stub-object' ||
@@ -48,7 +48,7 @@ function walk(
     node.kind === 'ndjson-line'
   ) {
     out.push({
-      path: node.path,
+      id: node.id,
       byteStart: node.byteStart,
       byteEnd: node.byteEnd,
     });
@@ -131,7 +131,7 @@ function rowMatches(
     return true;
   }
   // Deep match — stubs and lines whose worker-decoded content includes the
-  // needle. Path-keyed so a stub at $.events[42] that contains "error"
+  // needle. Pointer-keyed so a stub at /events/42 that contains "error"
   // surfaces here without our needing to materialize it client-side.
   if ((row.kind === 'stub' || row.kind === 'line') && deep?.has(row.id)) {
     return true;

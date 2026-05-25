@@ -26,8 +26,8 @@ type Args = {
   // and share the same useStubExpansion flow.
   // ESC during expansion aborts and clears the pending paths.
   expandStubRow: (row: Extract<FlatRow, { kind: 'stub' | 'line' }>) => void;
-  expandingPaths: Set<string>;
-  clearExpanding: (path: string) => void;
+  expandingIds: Set<string>;
+  clearExpanding: (id: string) => void;
 };
 
 // All keyboard nav for the tree pane: arrows (with PageUp/Down and Home/End),
@@ -50,7 +50,7 @@ export function useTreeKeyboardNav({
   openDrawer,
   containerRef,
   expandStubRow,
-  expandingPaths,
+  expandingIds,
   clearExpanding,
 }: Args) {
   const moveFocus = (delta: number) => {
@@ -93,7 +93,7 @@ export function useTreeKeyboardNav({
       // on the row; user presses → again after materialization to descend
       // into the first child. Lines and stubs share the same expansion
       // flow (useStubExpansion) — same UX contract.
-      if (!expandingPaths.has(row.id)) expandStubRow(row);
+      if (!expandingIds.has(row.id)) expandStubRow(row);
       return;
     }
     if (row.kind !== 'open') return;
@@ -121,7 +121,7 @@ export function useTreeKeyboardNav({
       // Enter on a stub or line triggers in-place expansion. Drawer is
       // NOT opened from Enter — info-icon click is the explicit drawer
       // path, and opening both would just duplicate the request.
-      if (!expandingPaths.has(row.id)) expandStubRow(row);
+      if (!expandingIds.has(row.id)) expandStubRow(row);
     } else if (row.kind === 'leaf') {
       openDrawer(row);
     }
@@ -131,8 +131,11 @@ export function useTreeKeyboardNav({
     if (focusedIndex === null) return;
     const row = flat[focusedIndex];
     if (row.kind === 'close') return;
-    void copyText(row.id).then((ok) => {
-      if (ok) toast.success('Path copied', { description: row.id });
+    // Display path (JSONPath), not the pointer id — users expect to
+    // paste `$.events[42].user.id` style strings, not RFC 6901 pointers.
+    const displayPath = row.node.path;
+    void copyText(displayPath).then((ok) => {
+      if (ok) toast.success('Path copied', { description: displayPath });
       else toast.error('Could not copy');
     });
   };
@@ -182,11 +185,11 @@ export function useTreeKeyboardNav({
         handleEnter();
         break;
       case 'Escape':
-        if (expandingPaths.size > 0) {
+        if (expandingIds.size > 0) {
           // Cancel any in-flight stub expansion. The useStubExpansion hook
-          // detects an aborted call by checking `expandingPaths.has(id)`
+          // detects an aborted call by checking `expandingIds.has(id)`
           // after the await returns — clearing them here is the signal.
-          for (const path of expandingPaths) clearExpanding(path);
+          for (const id of expandingIds) clearExpanding(id);
           abortParser();
         } else if (query !== '') {
           setQuery('');

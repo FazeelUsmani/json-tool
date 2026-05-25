@@ -10,7 +10,7 @@
 // Worker liveness derives from three signals checked in priority order:
 //   1. parserHost.isParsing()           → "parsing"
 //   2. viewStore.stubSearchProgress     → "searching" (+ scan progress)
-//   3. viewStore.expandingPaths.size>0  → "expanding N stub(s)"
+//   3. viewStore.expandingIds.size>0  → "expanding N stub(s)"
 //   else                                → "idle"
 //
 // `performance.memory.usedJSHeapSize` (Chromium only) reflects the main
@@ -135,7 +135,7 @@ export function MemoryHud() {
           worker: deriveWorkerStatus(
             isParsing(),
             view.stubSearchProgress,
-            view.expandingPaths.size,
+            view.expandingIds.size,
           ),
           mainHeapBytes: readMainHeap(),
         };

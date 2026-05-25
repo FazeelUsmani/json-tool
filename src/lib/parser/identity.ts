@@ -3,7 +3,7 @@
 //
 //   - `id` (JSON Pointer per RFC 6901): used as the key for every
 //     Set / Map / WeakMap that tracks node identity — collapse
-//     state, expandingPaths, stubSearchMatches, splice targeting,
+//     state, expandingIds, stubSearchMatches, splice targeting,
 //     stub-preview cache, row-materialization cache. Collision-safe
 //     under all JSON key shapes including dots, brackets, slashes,
 //     and tildes (the only chars that need escaping).

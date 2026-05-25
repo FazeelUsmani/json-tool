@@ -35,15 +35,17 @@ const api = {
     });
   },
 
-  // Re-parse a byte slice of `file` as if it were rooted at `basePath`,
+  // Re-parse a byte slice of `file` as if it were rooted at `basePath`
+  // (JSONPath for display) and `baseId` (RFC 6901 pointer for identity),
   // shifting all reported offsets by `byteStart` so they remain absolute
   // file coordinates. The result's root TreeNode REPLACES the stub at
-  // basePath in the main thread's tree.
+  // baseId in the main thread's tree.
   async expandStub(
     file: Blob,
     byteStart: number,
     byteEnd: number,
     basePath: string,
+    baseId: string,
   ): Promise<ParseResult> {
     abortFlag = { aborted: false };
     const slice = file.slice(byteStart, byteEnd);
@@ -51,6 +53,7 @@ const api = {
       signal: abortFlag,
       totalBytes: slice.size,
       basePath,
+      baseId,
       byteOffsetBase: byteStart,
     });
   },
@@ -64,12 +67,12 @@ const api = {
   // FlatRow node.key / leaf-primitive values — content inside stubs is
   // invisible to it (the parser deliberately leaves stubs as byte refs to
   // keep RSS bounded). This scan decodes each range, case-insensitive
-  // includes-checks, and posts matching paths back in batches.
+  // includes-checks, and posts matching pointer ids back in batches.
   //
   // Strategy: read the full Blob bytes once (one ArrayBuffer alloc) and
   // sub-decode per range. Cheaper than 900K Blob.slice().text() awaits;
   // the buffer is released when this function returns. Bail-on-first-
-  // match per range (option ii) — we record the stub's path, not every
+  // match per range (option ii) — we record the stub's id, not every
   // hit position. The user click-expands to drill in.
   //
   // Cancellation: the main thread re-creates searchAbortFlag at entry,
@@ -79,12 +82,12 @@ const api = {
   async searchStubs(
     file: Blob,
     ranges: readonly {
-      path: string;
+      id: string;
       byteStart: number;
       byteEnd: number;
     }[],
     needle: string,
-    onBatch: (batch: { path: string }[], scanned: number) => void,
+    onBatch: (batch: { id: string }[], scanned: number) => void,
   ): Promise<void> {
     searchAbortFlag = { aborted: false };
     const lowerNeedle = needle.toLowerCase();
@@ -115,7 +118,7 @@ const api = {
 
     const BATCH_SIZE = 2000;
     const ABORT_CHECK_EVERY = 256;
-    const batch: { path: string }[] = [];
+    const batch: { id: string }[] = [];
     const first = needleBytes[0];
 
     for (let i = 0; i < ranges.length; i++) {
@@ -138,7 +141,7 @@ const api = {
         break;
       }
       if (found) {
-        batch.push({ path: r.path });
+        batch.push({ id: r.id });
         if (batch.length >= BATCH_SIZE) {
           onBatch(batch.slice(), i + 1);
           batch.length = 0;

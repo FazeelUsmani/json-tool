@@ -2,9 +2,15 @@
 // per rendered line. This is the data structure that W2-Tue's react-window
 // will consume — visible-row count drives render cost, not total node count.
 //
-// IDs are JSON paths (e.g. `$.users[0].name`) so the viewStore's `closed`
-// Set survives reparses: a user editing one part of the document keeps
-// their unrelated collapsed subtrees collapsed.
+// FlatRow.id reuses the TreeNode's `id` (JSON Pointer per RFC 6901,
+// produced by parser/identity.ts) — collision-safe under keys with
+// `.`, `[`, `]`, `/`, `~`. The viewStore's `closed` Set + every other
+// identity-keyed Set/Map/WeakMap reads this same id, so survival
+// across reparses (a user editing one part of the document keeps
+// unrelated collapsed subtrees collapsed) carries through unchanged.
+//
+// Display surfaces (breadcrumb, drawer title, copy-to-clipboard) read
+// `node.path` (JSONPath) directly — id is purely a key.
 //
 // Each composite emits an `open` row + recursive children + a `close` row.
 // Empty composites collapse to a single `leaf` row (rendered inline as
@@ -87,7 +93,7 @@ function walk(
   if (node.kind === 'stub-object' || node.kind === 'stub-array') {
     out.push({
       kind: 'stub',
-      id: node.path,
+      id: node.id,
       depth,
       node,
       parentKind,
@@ -98,7 +104,7 @@ function walk(
   if (node.kind === 'ndjson-line') {
     out.push({
       kind: 'line',
-      id: node.path,
+      id: node.id,
       depth,
       node,
       parentKind,
@@ -111,7 +117,7 @@ function walk(
       // Empty `{}` / `[]` renders as one row, no open/close pair.
       out.push({
         kind: 'leaf',
-        id: node.path,
+        id: node.id,
         depth,
         node,
         parentKind,
@@ -122,7 +128,7 @@ function walk(
     const openIndex = out.length;
     out.push({
       kind: 'open',
-      id: node.path,
+      id: node.id,
       depth,
       node,
       parentKind,
@@ -136,7 +142,7 @@ function walk(
       kind: 'close',
       // Suffix on close-row IDs only — React key uniqueness; close rows
       // aren't toggleable so this ID never enters the `closed` Set.
-      id: `${node.path}#close`,
+      id: `${node.id}#close`,
       depth,
       closeBracket: node.kind === 'object' ? '}' : ']',
       parentIndex: openIndex,
@@ -145,7 +151,7 @@ function walk(
   }
   out.push({
     kind: 'leaf',
-    id: node.path,
+    id: node.id,
     depth,
     node,
     parentKind,

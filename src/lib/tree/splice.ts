@@ -1,5 +1,5 @@
-// Replaces a node in a TreeNode tree by path, used by W3 stub expansion to
-// merge a worker-materialized subtree back into the spine.
+// Replaces a node in a TreeNode tree by JSON Pointer id, used by W3 stub
+// expansion to merge a worker-materialized subtree back into the spine.
 //
 // Returns a NEW root with structural sharing for unchanged subtrees — only
 // nodes on the path from root to the spliced location get new identities.
@@ -17,40 +17,38 @@ import type { TreeNode } from './parse';
 
 export function spliceSubtree(
   root: TreeNode,
-  atPath: string,
+  atId: string,
   replacement: TreeNode,
 ): TreeNode {
   // Preserve the original's key: the worker parses the subtree in
-  // isolation via basePath and returns a root with key:null, which would
+  // isolation via baseId and returns a root with key:null, which would
   // drop the array index or object-key label after the splice (e.g.
   // [41746] would collapse to a keyless `{ … } {5}` row after expand→
   // collapse). Only allocate when keys actually differ — keeps structural
   // sharing intact for callers that pre-aligned the key.
-  if (root.path === atPath) {
+  if (root.id === atId) {
     return replacement.key === root.key
       ? replacement
       : { ...replacement, key: root.key };
   }
 
-  // Early-out when atPath cannot lie under root.path: a node's children's
-  // paths all extend root.path with either `.` (object key) or `[` (array
-  // index). If atPath doesn't start with one of those, no descent needed.
-  if (
-    !atPath.startsWith(root.path + '.') &&
-    !atPath.startsWith(root.path + '[')
-  ) {
+  // Early-out when atId cannot lie under root.id: JSON Pointer always
+  // uses `/` as the separator between segments, so a descendant id
+  // starts with `${root.id}/`. Root (id="") + `/` = `/`, which any
+  // non-root pointer starts with, so the check covers that case too.
+  if (!atId.startsWith(root.id + '/')) {
     return root;
   }
 
   if (root.kind !== 'object' && root.kind !== 'array') {
     // Stub or primitive at this position — can't descend further, but
-    // atPath is supposedly inside it. Path doesn't exist; return as-is.
+    // atId is supposedly inside it. Id doesn't exist; return as-is.
     return root;
   }
 
   let changed = false;
   const newChildren = root.children.map((child) => {
-    const next = spliceSubtree(child, atPath, replacement);
+    const next = spliceSubtree(child, atId, replacement);
     if (next !== child) changed = true;
     return next;
   });

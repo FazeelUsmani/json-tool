@@ -1,9 +1,10 @@
 // Tree-pane view state. Owns the flat row array (derived from a parsed
 // TreeNode via flattenTree) and the set of collapsed composite IDs.
 //
-// `closed` is a Set of JSON-path IDs — paths are stable across reparses of
-// unrelated edits, so a user collapsing `$.users[0]` and then typing in
-// some unrelated key keeps their collapse. Stale entries for paths that no
+// `closed` is a Set of JSON Pointer IDs (RFC 6901, produced by
+// parser/identity.ts) — these are stable across reparses of unrelated
+// edits, so a user collapsing `/users/0` and then typing in some
+// unrelated key keeps their collapse. Stale entries for ids that no
 // longer exist after major edits are harmless (just memory).
 //
 // Visibility derivation lives in `flatten.ts` (deriveVisible) so it's
@@ -13,13 +14,13 @@
 //   const visible = useMemo(() => deriveVisible(flat, closed), [flat, closed]);
 //
 // W3-Mon added `root` (the TreeNode tree backing `flat` — needed by
-// splice on stub expansion), `expandingPaths` (in-flight expansions for
+// splice on stub expansion), `expandingIds` (in-flight expansions for
 // spinner display), and `sourceBlob` (the Blob backing the current parse
 // — needed by parserHost.expandStub to re-slice byte ranges).
 //
 // Tipping-point note: viewStore now mixes view state (flat, closed,
 // focus, drawer, query) with parser-session state (root, sourceBlob,
-// expandingPaths). If anything else parser-input-shaped lands (parse
+// expandingIds). If anything else parser-input-shaped lands (parse
 // options, format detection, NDJSON cursor), split parser fields into a
 // dedicated `parserSession` store rather than growing this one further.
 
@@ -55,10 +56,10 @@ type ViewState = {
   // The row currently shown in the detail drawer. Null when the drawer is
   // closed. Re-resolved by id on each reparse.
   drawerFor: FlatRow | null;
-  // Paths of stubs currently being expanded via parserHost.expandStub.
+  // Pointer IDs of stubs currently being expanded via parserHost.expandStub.
   // StubRow reads membership to show a spinner; ESC reads non-empty to
   // route abort to the worker.
-  expandingPaths: Set<string>;
+  expandingIds: Set<string>;
   // Source Blob for the most recent streaming parse. parserHost.expandStub
   // re-slices this on stub click. Null when nothing parsed yet OR when
   // running via the sync (?streaming=0) path.
@@ -67,9 +68,9 @@ type ViewState = {
   // Drives parser dispatch (JSON streaming spine vs NDJSON line index)
   // and the LineRow/StubRow render branch via the FlatRow shape.
   parseMode: 'json' | 'ndjson';
-  // Paths of stubs / NDJSON lines that the worker's content scan found
-  // matching the current query. Kept separate from `matchIndices`
-  // (returned by sync findMatches) so the two paths can evolve
+  // Pointer IDs of stubs / NDJSON lines that the worker's content scan
+  // found matching the current query. Kept separate from `matchIndices`
+  // (returned by sync findMatches) so the two pipelines can evolve
   // independently — e.g., a future "deep matches" highlight color
   // doesn't need to re-derive which matches came from which source.
   // Cleared on query change; rebuilt incrementally as the worker
@@ -88,11 +89,11 @@ type ViewActions = {
   setFocusedIndex: (index: number | null) => void;
   openDrawer: (row: FlatRow) => void;
   closeDrawer: () => void;
-  setExpanding: (path: string, value: boolean) => void;
+  setExpanding: (id: string, value: boolean) => void;
   setSourceBlob: (blob: Blob | null) => void;
   setParseMode: (mode: 'json' | 'ndjson') => void;
-  // Bulk-add paths from a worker search batch.
-  addStubSearchMatches: (paths: readonly string[]) => void;
+  // Bulk-add pointer ids from a worker search batch.
+  addStubSearchMatches: (ids: readonly string[]) => void;
   setStubSearchProgress: (
     progress: { scanned: number; total: number } | null,
   ) => void;
@@ -109,7 +110,7 @@ export const useViewStore = create<ViewState & ViewActions>()(
     query: '',
     focusedIndex: null,
     drawerFor: null,
-    expandingPaths: new Set<string>(),
+    expandingIds: new Set<string>(),
     sourceBlob: null,
     parseMode: 'json' as const,
     stubSearchMatches: new Set<string>(),
@@ -162,10 +163,10 @@ export const useViewStore = create<ViewState & ViewActions>()(
       set((state) => {
         state.drawerFor = null;
       }),
-    setExpanding: (path, value) =>
+    setExpanding: (id, value) =>
       set((state) => {
-        if (value) state.expandingPaths.add(path);
-        else state.expandingPaths.delete(path);
+        if (value) state.expandingIds.add(id);
+        else state.expandingIds.delete(id);
       }),
     setSourceBlob: (blob) =>
       set((state) => {
@@ -175,9 +176,9 @@ export const useViewStore = create<ViewState & ViewActions>()(
       set((state) => {
         state.parseMode = mode;
       }),
-    addStubSearchMatches: (paths) =>
+    addStubSearchMatches: (ids) =>
       set((state) => {
-        for (const p of paths) state.stubSearchMatches.add(p);
+        for (const id of ids) state.stubSearchMatches.add(id);
       }),
     setStubSearchProgress: (progress) =>
       set((state) => {

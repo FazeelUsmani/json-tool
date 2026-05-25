@@ -122,8 +122,9 @@ export async function expandStub(
   byteStart: number,
   byteEnd: number,
   basePath: string,
+  baseId: string,
 ): Promise<ParseResult> {
-  return ensureWorker().expandStub(file, byteStart, byteEnd, basePath);
+  return ensureWorker().expandStub(file, byteStart, byteEnd, basePath, baseId);
 }
 
 export function abort(): void {
@@ -143,12 +144,12 @@ export function abort(): void {
 export async function searchStubs(
   file: Blob,
   ranges: readonly {
-    path: string;
+    id: string;
     byteStart: number;
     byteEnd: number;
   }[],
   needle: string,
-  onBatch: (batch: { path: string }[], scanned: number) => void,
+  onBatch: (batch: { id: string }[], scanned: number) => void,
 ): Promise<void> {
   const remote = ensureWorker();
   await remote.searchStubs(file, ranges, needle, Comlink.proxy(onBatch));

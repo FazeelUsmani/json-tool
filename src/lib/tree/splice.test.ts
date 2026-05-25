@@ -2,29 +2,37 @@ import { describe, expect, test } from 'vitest';
 import { spliceSubtree } from './splice';
 import type { TreeNode } from './parse';
 
-// splice currently targets by path; id is irrelevant to the test's assertions.
-// Reusing path as id keeps fixtures terse — Phase 4 will migrate to pointer ids.
+// splice navigates by RFC 6901 pointer id (with `/` separator). Test
+// fixtures hand-roll JSONPath display strings and derive the pointer
+// equivalent via pathToId — fine for the simple keys used here.
+function pathToId(path: string): string {
+  if (path === '$') return '';
+  return path
+    .slice(1)
+    .replace(/\.([^.\[]+)/g, '/$1')
+    .replace(/\[(\d+)\]/g, '/$1');
+}
 function leaf(key: string | null, path: string, value: number): TreeNode {
-  return { kind: 'number', id: path, key, path, value };
+  return { kind: 'number', id: pathToId(path), key, path, value };
 }
 function obj(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): TreeNode {
-  return { kind: 'object', id: path, key, path, children };
+  return { kind: 'object', id: pathToId(path), key, path, children };
 }
 function arr(
   key: string | null,
   path: string,
   children: TreeNode[],
 ): TreeNode {
-  return { kind: 'array', id: path, key, path, children };
+  return { kind: 'array', id: pathToId(path), key, path, children };
 }
 function stub(key: string, path: string): TreeNode {
   return {
     kind: 'stub-object',
-    id: path,
+    id: pathToId(path),
     key,
     path,
     byteStart: 0,
@@ -38,7 +46,7 @@ describe('spliceSubtree', () => {
   test('replaces root when atPath === root.path', () => {
     const before = obj(null, '$', [leaf('a', '$.a', 1)]);
     const after = obj(null, '$', [leaf('b', '$.b', 2)]);
-    const result = spliceSubtree(before, '$', after);
+    const result = spliceSubtree(before, pathToId('$'), after);
     expect(result).toBe(after);
   });
 
@@ -48,7 +56,7 @@ describe('spliceSubtree', () => {
       leaf('x', '$.outer.inner.x', 42),
     ]);
     const root = obj(null, '$', [obj('outer', '$.outer', [target])]);
-    const result = spliceSubtree(root, '$.outer.inner', materialized);
+    const result = spliceSubtree(root, pathToId('$.outer.inner'), materialized);
     if (result.kind !== 'object') throw new Error('unreachable');
     const outer = result.children[0];
     if (outer.kind !== 'object') throw new Error('unreachable');
@@ -62,7 +70,7 @@ describe('spliceSubtree', () => {
     ]);
     const sibling = leaf('1', '$.users[1]', 2);
     const root = obj(null, '$', [arr('users', '$.users', [target, sibling])]);
-    const result = spliceSubtree(root, '$.users[0]', materialized);
+    const result = spliceSubtree(root, pathToId('$.users[0]'), materialized);
     if (result.kind !== 'object') throw new Error('unreachable');
     const users = result.children[0];
     if (users.kind !== 'array') throw new Error('unreachable');
@@ -84,7 +92,7 @@ describe('spliceSubtree', () => {
       untouchedB,
       untouchedC,
     ]);
-    const result = spliceSubtree(root, '$.a.inner', replacement);
+    const result = spliceSubtree(root, pathToId('$.a.inner'), replacement);
     if (result.kind !== 'object') throw new Error('unreachable');
     if (root.kind !== 'object') throw new Error('unreachable');
     // Path to spliced node gets new identities.
@@ -102,7 +110,7 @@ describe('spliceSubtree', () => {
     // instead of dropping the index label.
     const line: TreeNode = {
       kind: 'ndjson-line',
-      id: '$[7]',
+      id: '/7',
       key: '7',
       path: '$[7]',
       byteStart: 0,
@@ -110,13 +118,13 @@ describe('spliceSubtree', () => {
     };
     const replacement: TreeNode = {
       kind: 'number',
-      id: '$[7]',
+      id: '/7',
       key: null,
       path: '$[7]',
       value: 42,
     };
     const root = arr(null, '$', [line]);
-    const result = spliceSubtree(root, '$[7]', replacement);
+    const result = spliceSubtree(root, pathToId('$[7]'), replacement);
     if (result.kind !== 'array') throw new Error('unreachable');
     const child = result.children[0];
     expect(child.kind).toBe('number');
@@ -130,7 +138,7 @@ describe('spliceSubtree', () => {
     // root that replaces the ndjson-line.
     const line: TreeNode = {
       kind: 'ndjson-line',
-      id: '$[0]',
+      id: '/0',
       key: '0',
       path: '$[0]',
       byteStart: 0,
@@ -140,7 +148,7 @@ describe('spliceSubtree', () => {
       leaf('a', '$[0].a', 1),
     ]);
     const root = arr(null, '$', [line]);
-    const result = spliceSubtree(root, '$[0]', replacement);
+    const result = spliceSubtree(root, pathToId('$[0]'), replacement);
     if (result.kind !== 'array') throw new Error('unreachable');
     const child = result.children[0];
     if (child.kind !== 'object') throw new Error('unreachable');
@@ -160,7 +168,7 @@ describe('spliceSubtree', () => {
       leaf('id', '$.events[0].id', 1),
     ]);
     const root = obj(null, '$', [arr('events', '$.events', [stubAt0])]);
-    const result = spliceSubtree(root, '$.events[0]', workerReply);
+    const result = spliceSubtree(root, pathToId('$.events[0]'), workerReply);
     if (result.kind !== 'object') throw new Error('unreachable');
     const events = result.children[0];
     if (events.kind !== 'array') throw new Error('unreachable');
@@ -169,7 +177,7 @@ describe('spliceSubtree', () => {
 
   test('missing path returns root unchanged (no error)', () => {
     const root = obj(null, '$', [leaf('a', '$.a', 1)]);
-    const result = spliceSubtree(root, '$.nonexistent', obj('x', '$.x', []));
+    const result = spliceSubtree(root, pathToId('$.nonexistent'), obj('x', '$.x', []));
     expect(result).toBe(root);
   });
 
@@ -181,7 +189,7 @@ describe('spliceSubtree', () => {
       leaf('0', '$.users[0]', 1),
       leaf('1', '$.users[1]', 2),
     ]);
-    const result = spliceSubtree(root, '$.other', obj('x', '$.x', []));
+    const result = spliceSubtree(root, pathToId('$.other'), obj('x', '$.x', []));
     expect(result).toBe(root);
   });
 });
