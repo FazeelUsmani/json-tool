@@ -40,6 +40,7 @@ export function QueryPane({ root, onJumpToTree }: Props) {
   const flat = useViewStore((s) => s.flat);
   const closed = useViewStore((s) => s.closed);
   const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
+  const flashRow = useViewStore((s) => s.flashRow);
 
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -82,6 +83,11 @@ export function QueryPane({ root, onJumpToTree }: Props) {
       return;
     }
     setFocusedIndex(idx);
+    // Flash the row briefly so the user can immediately spot which
+    // row matched — the standard focus highlight (border-primary
+    // bg-accent/30) is calibrated for keyboard nav and too subtle
+    // for a tab-switching jump.
+    flashRow(pointer);
     onJumpToTree();
   };
 

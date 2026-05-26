@@ -68,6 +68,7 @@ function OpenRow({
       })),
     );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const isFlashing = useViewStore((s) => s.flashingId === row.id);
   // Closed state is sacred — a collapsed subtree stays collapsed during
   // search. Matches inside it are reported in the count but won't render
   // until the user opens the parent.
@@ -80,6 +81,7 @@ function OpenRow({
       pad={pad(row.depth)}
       path={row.node.path}
       isFocused={isFocused}
+      isFlashing={isFlashing}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={() => toggle(row.id)}
       onShowDetail={() => openDrawer(row)}
@@ -140,11 +142,12 @@ function CloseRow({
 }) {
   const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const isFlashing = useViewStore((s) => s.flashingId === row.id);
   return (
     <div
       className={`flex items-center border-l-2 ${
         isFocused ? 'border-primary bg-accent/30' : 'border-transparent'
-      }`}
+      }${isFlashing ? ' animate-flash-focus' : ''}`}
       style={pad(row.depth)}
       onMouseDown={() => setFocusedIndex(flatIdx)}
     >
@@ -180,6 +183,7 @@ function StubRow({
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const isFlashing = useViewStore((s) => s.flashingId === row.id);
   const sourceBlob = useViewStore((s) => s.sourceBlob);
   const expand = useStubExpansion();
   const node = row.node;
@@ -204,6 +208,7 @@ function StubRow({
       pad={pad(row.depth)}
       path={row.node.path}
       isFocused={isFocused}
+      isFlashing={isFlashing}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={isExpanding ? undefined : () => void expand(row)}
       onShowDetail={() => openDrawer(row)}
@@ -286,6 +291,7 @@ function LineRow({
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const isFlashing = useViewStore((s) => s.flashingId === row.id);
   const sourceBlob = useViewStore((s) => s.sourceBlob);
   const expand = useStubExpansion();
   const node = row.node;
@@ -308,6 +314,7 @@ function LineRow({
       pad={pad(row.depth)}
       path={row.node.path}
       isFocused={isFocused}
+      isFlashing={isFlashing}
       onFocus={() => setFocusedIndex(flatIdx)}
       onToggle={isExpanding ? undefined : () => void expand(row)}
       onShowDetail={() => openDrawer(row)}
@@ -339,6 +346,7 @@ function LeafRow({
     })),
   );
   const isFocused = useViewStore((s) => s.focusedIndex === flatIdx);
+  const isFlashing = useViewStore((s) => s.flashingId === row.id);
   const node = row.node;
   if (node.kind === 'object' || node.kind === 'array') {
     const isObj = node.kind === 'object';
@@ -349,6 +357,7 @@ function LeafRow({
         pad={pad(row.depth)}
         path={row.node.path}
         isFocused={isFocused}
+        isFlashing={isFlashing}
         onFocus={() => setFocusedIndex(flatIdx)}
         onShowDetail={() => openDrawer(row)}
       >
@@ -366,6 +375,7 @@ function LeafRow({
       pad={pad(row.depth)}
       path={row.node.path}
       isFocused={isFocused}
+      isFlashing={isFlashing}
       onFocus={() => setFocusedIndex(flatIdx)}
       onShowDetail={() => openDrawer(row)}
     >
@@ -385,6 +395,7 @@ function Row({
   pad,
   path,
   isFocused,
+  isFlashing,
   onFocus,
   onToggle,
   onShowDetail,
@@ -393,6 +404,11 @@ function Row({
   pad: React.CSSProperties;
   path: string;
   isFocused: boolean;
+  // True for the row id stored in viewStore.flashingId (cleared
+  // after viewStore.flashRow's auto-timer fires). Distinct from
+  // isFocused — flash is opt-in per call site (currently only the
+  // JSONPath QueryPane click-jump), keyboard nav stays subtle.
+  isFlashing: boolean;
   onFocus: () => void;
   onToggle?: () => void;
   onShowDetail?: () => void;
@@ -404,7 +420,7 @@ function Row({
         isFocused
           ? 'border-primary bg-accent/30'
           : 'hover:bg-muted/40 border-transparent'
-      }`}
+      }${isFlashing ? ' animate-flash-focus' : ''}`}
       style={pad}
       onMouseDown={onFocus}
     >

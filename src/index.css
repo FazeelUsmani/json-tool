@@ -128,3 +128,16 @@
     @apply font-sans;
     }
 }
+
+/* One-shot flash animation for tree rows jumped-to from a non-tree
+   action (JSONPath QueryPane result click). Yellow tint fading to
+   transparent over 1.5s — visible enough to spot the row, brief
+   enough to not linger. oklch chroma 0.18 reads as warm yellow in
+   both light and dark themes. */
+@keyframes flash-focus {
+  0%   { background-color: oklch(0.85 0.18 90 / 0.6); }
+  100% { background-color: transparent; }
+}
+.animate-flash-focus {
+  animation: flash-focus 1.5s ease-out;
+}

@@ -80,6 +80,12 @@ type ViewState = {
   // is running. TreeSearch reads this to show "Scanning N / M" + a
   // cancel affordance.
   stubSearchProgress: { scanned: number; total: number } | null;
+  // Row id of the currently-flashing tree row. Used to draw attention
+  // to a row that was just jumped-to via a non-tree action (JSONPath
+  // query result click, future deep-link nav, etc.). Distinct from
+  // focusedIndex which fires on every arrow keystroke too — flash is
+  // opt-in per call site so keyboard nav stays subtle.
+  flashingId: string | null;
 };
 
 type ViewActions = {
@@ -100,6 +106,12 @@ type ViewActions = {
   // Drop all stub-search state in one transaction. Called when the
   // query becomes empty or the source blob changes.
   clearStubSearch: () => void;
+  // Flash a row's visual highlight for `ms` (default 1500). Caller
+  // sites are JSONPath QueryPane click-jump + any future cross-tab
+  // jump that wants extra visibility on landing. Auto-clears via
+  // setTimeout — the same caller can flash a different row before
+  // the timer fires; the latest call wins.
+  flashRow: (id: string, ms?: number) => void;
 };
 
 export const useViewStore = create<ViewState & ViewActions>()(
@@ -115,6 +127,7 @@ export const useViewStore = create<ViewState & ViewActions>()(
     parseMode: 'json' as const,
     stubSearchMatches: new Set<string>(),
     stubSearchProgress: null,
+    flashingId: null,
     setRoot: (root) =>
       set((state) => {
         const newFlat = root === null ? [] : flattenTree(root);
@@ -189,5 +202,19 @@ export const useViewStore = create<ViewState & ViewActions>()(
         state.stubSearchMatches = new Set<string>();
         state.stubSearchProgress = null;
       }),
+    flashRow: (id, ms = 1500) => {
+      set((state) => {
+        state.flashingId = id;
+      });
+      // Auto-clear after ms. Guard against "earlier flash's timer
+      // clears a later flash" via id-equality check at clear time —
+      // if a later flashRow set flashingId to a different id, leave
+      // it alone.
+      setTimeout(() => {
+        set((state) => {
+          if (state.flashingId === id) state.flashingId = null;
+        });
+      }, ms);
+    },
   })),
 );
