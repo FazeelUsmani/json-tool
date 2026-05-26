@@ -13,6 +13,14 @@ export function Component() {
           name="description"
           content="Open NDJSON / JSON Lines files (logs, LLM training data, exports). Line-paginated browser, expand individual lines, search across the file."
         />
+        {/* OG/Twitter: see App.tsx for the og:image/og:url brand-gating rationale. */}
+        <meta property="og:title" content="NDJSON Viewer — line-delimited JSON in the browser" />
+        <meta property="og:description" content="Open NDJSON / JSON Lines files (logs, LLM training data, exports). Line-paginated browser, expand individual lines, search across the file." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="json-tool" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="NDJSON Viewer — line-delimited JSON in the browser" />
+        <meta name="twitter:description" content="Open NDJSON / JSON Lines files (logs, LLM training data, exports). Line-paginated browser, expand individual lines, search across the file." />
       </Head>
       <main className="mx-auto max-w-3xl px-6 py-16">
         <StubBanner />

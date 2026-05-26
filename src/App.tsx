@@ -25,6 +25,16 @@ function App() {
           name="description"
           content="Free JSON tool: paste, format, minify, sort keys, tree view with click-to-copy JSONPath. Up to 500MB. We never see your data."
         />
+        {/* Open Graph + Twitter Card. og:title/og:description reuse the
+            on-page values; og:image + og:url stay brand-gated (need
+            canonical domain + a screenshot the brand decision unblocks). */}
+        <meta property="og:title" content="json-tool — fast JSON viewer, formatter, tree explorer" />
+        <meta property="og:description" content="Free JSON tool: paste, format, minify, sort keys, tree view with click-to-copy JSONPath. Up to 500MB. We never see your data." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="json-tool" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="json-tool — fast JSON viewer, formatter, tree explorer" />
+        <meta name="twitter:description" content="Free JSON tool: paste, format, minify, sort keys, tree view with click-to-copy JSONPath. Up to 500MB. We never see your data." />
       </Head>
       <AppShell>
         <ResizablePanes

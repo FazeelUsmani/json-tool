@@ -13,6 +13,14 @@ export function Component() {
           name="description"
           content="Open and explore JSON files up to 500MB without crashing your browser. Streaming parser, virtualized tree, lazy expansion. We never see your data."
         />
+        {/* OG/Twitter: see App.tsx for the og:image/og:url brand-gating rationale. */}
+        <meta property="og:title" content="Large JSON Viewer — up to 500MB in the browser" />
+        <meta property="og:description" content="Open and explore JSON files up to 500MB without crashing your browser. Streaming parser, virtualized tree, lazy expansion. We never see your data." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="json-tool" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Large JSON Viewer — up to 500MB in the browser" />
+        <meta name="twitter:description" content="Open and explore JSON files up to 500MB without crashing your browser. Streaming parser, virtualized tree, lazy expansion. We never see your data." />
       </Head>
       <main className="mx-auto max-w-3xl px-6 py-16">
         <StubBanner />

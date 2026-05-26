@@ -12,6 +12,14 @@ export function Component() {
           name="description"
           content="Free JSON viewer. Paste, drag-drop, or load from a URL. Format, minify, sort keys. Tree view with click-to-copy JSONPath. We never see your data."
         />
+        {/* OG/Twitter: see App.tsx for the og:image/og:url brand-gating rationale. */}
+        <meta property="og:title" content="JSON Viewer — Paste, format, inspect" />
+        <meta property="og:description" content="Free JSON viewer. Paste, drag-drop, or load from a URL. Format, minify, sort keys. Tree view with click-to-copy JSONPath. We never see your data." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="json-tool" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="JSON Viewer — Paste, format, inspect" />
+        <meta name="twitter:description" content="Free JSON viewer. Paste, drag-drop, or load from a URL. Format, minify, sort keys. Tree view with click-to-copy JSONPath. We never see your data." />
       </Head>
       <Hero
         h1="JSON Viewer"

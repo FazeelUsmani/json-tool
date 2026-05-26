@@ -13,6 +13,14 @@ export function Component() {
           name="description"
           content="Paste broken JSON — trailing commas, unquoted keys, single quotes, comments. We try to repair it in your browser and show a before/after diff."
         />
+        {/* OG/Twitter: see App.tsx for the og:image/og:url brand-gating rationale. */}
+        <meta property="og:title" content="JSON Repair — fix broken JSON in the browser" />
+        <meta property="og:description" content="Paste broken JSON — trailing commas, unquoted keys, single quotes, comments. We try to repair it in your browser and show a before/after diff." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="json-tool" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="JSON Repair — fix broken JSON in the browser" />
+        <meta name="twitter:description" content="Paste broken JSON — trailing commas, unquoted keys, single quotes, comments. We try to repair it in your browser and show a before/after diff." />
       </Head>
       <main className="mx-auto max-w-3xl px-6 py-16">
         <StubBanner />
