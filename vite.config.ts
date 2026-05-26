@@ -90,7 +90,13 @@ export default defineConfig(({ isSsrBuild }) => ({
       output: {
         // monaco-editor is externalized during SSR (browser-only), so
         // the manual chunk rule only applies to the client bundle.
-        manualChunks: isSsrBuild ? undefined : { monaco: ['monaco-editor'] },
+        // Match the editor.api entry the app actually imports (see
+        // src/lib/monaco/init.ts) so the manual-chunk targeting works
+        // post-tree-shake; falling back to the bulk 'monaco-editor'
+        // path would re-pull the dead language modules.
+        manualChunks: isSsrBuild
+          ? undefined
+          : { monaco: ['monaco-editor/esm/vs/editor/editor.api'] },
       },
     },
   },

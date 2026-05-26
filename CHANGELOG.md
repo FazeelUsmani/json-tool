@@ -165,6 +165,15 @@ git log carries the per-commit detail.
   than DevTools panel numbers. `workflow_dispatch` only; promote
   to on-PR once stable. Closes the 2026-05-22 review's §6
   weakness 9 (no Lighthouse CI).
+- **Monaco chunk tree-shake** — `src/lib/monaco/init.ts` switches
+  from the bulk `import * as monaco from 'monaco-editor'` to the
+  lighter `'monaco-editor/esm/vs/editor/editor.api'` entry; the JSON
+  contribution is imported explicitly. Drops the ts/css/html
+  workers + ~30 obscure language modules from `dist/`. **PWA
+  precache 14246 KiB → 5198 KiB (~9 MB shaved).** Bundle reduction
+  should land directly in cold-load Lighthouse Performance —
+  verify post-deploy. Closes the 2026-05-22 review's §6 Suggested
+  Improvement #10.
 - **Trusted Types wired (pending browser smoke before trust)** —
   `MonacoEnvironment.createTrustedTypesPolicy` hook in
   `src/lib/monaco/init.ts` routes Monaco's policy requests through

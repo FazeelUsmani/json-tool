@@ -21,7 +21,15 @@
 //      schemas are registered and remote schema fetching is off (would
 //      break the privacy claim).
 
-import * as monaco from 'monaco-editor';
+// Import from `editor.api` (not the bulk `monaco-editor` entry) so the
+// JS/TS/CSS/HTML language modules + their workers don't get pulled
+// into the bundle. We only configure JSON — the JSON contribution is
+// imported explicitly below. Prior to this tree-shake the production
+// bundle shipped ~9MB of dead chunks (ts.worker 7MB, css.worker 1MB,
+// html.worker 693KB, plus ~30 obscure language modules) that never
+// executed at runtime because MonacoEnvironment.getWorker only routes
+// to editor + json workers.
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import { jsonDefaults } from 'monaco-editor/esm/vs/language/json/monaco.contribution';
@@ -103,10 +111,6 @@ export function initMonaco(): void {
   });
 }
 
-// TODO(M1 W3+): tree-shake Monaco imports to drop ts.worker / css.worker /
-// html.worker chunks from dist/. Currently they ship (~8MB combined) but
-// never load at runtime because MonacoEnvironment.getWorker only routes to
-// editor + json workers. Runtime memory cost: zero. Bundle cost: ~8MB of
-// dead JS in dist/assets/. Fix: switch the main import to
-// `monaco-editor/esm/vs/editor/editor.api` and import only the JSON
-// language contribution explicitly.
+// Tree-shake done 2026-05-26 — see editor.api import above. The dead
+// ts.worker / css.worker / html.worker chunks no longer ship; the
+// JSON-only contribution import keeps the working set minimal.
