@@ -23,12 +23,20 @@
 //   - Hover preview of full value (defer; truncated cell is enough
 //     for v1)
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { parseToTree, type TreeNode } from '@/lib/tree/parse';
 import { diffTrees, type DiffOp } from '@/lib/diff/semantic';
+import {
+  clearBaseline,
+  formatRelativeTime,
+  loadBaseline,
+  saveBaseline,
+  type Baseline,
+} from '@/lib/diff/baseline';
 import { useViewStore } from '@/state/viewStore';
+import { useDocumentStore } from '@/state/documentStore';
 
 type Props = {
   root: TreeNode | null;
@@ -40,13 +48,32 @@ export function DiffPane({ root, onJumpToTree }: Props) {
   const closed = useViewStore((s) => s.closed);
   const setFocusedIndex = useViewStore((s) => s.setFocusedIndex);
   const flashRow = useViewStore((s) => s.flashRow);
+  const docText = useDocumentStore((s) => s.text);
 
   const [pasteText, setPasteText] = useState('');
   const [showSame, setShowSame] = useState(false);
+  // Baseline state — lazy-init avoided in favor of post-mount load
+  // because loadBaseline() touches localStorage, which vite-react-ssg's
+  // SSR shim defines as an object without callable methods. A useState
+  // lazy initializer would fire during the SSR pass and throw.
+  // useEffect only runs client-side; safe.
+  const [baseline, setBaseline] = useState<Baseline | null>(null);
+  useEffect(() => {
+    setBaseline(loadBaseline());
+  }, []);
+  // Diff state tracks which "after" source the result came from
+  // (paste vs baseline) so the UI can label the comparison correctly.
   const [diffState, setDiffState] = useState<
     | { kind: 'idle' }
     | { kind: 'parse-error'; message: string }
-    | { kind: 'success'; ops: DiffOp[] }
+    | {
+        kind: 'success';
+        ops: DiffOp[];
+        // Direction labels for the status indicator above results.
+        // When comparing baseline, the lib was called as
+        // diffTrees(baseline, current) so baseline IS the "before".
+        source: 'paste' | 'baseline';
+      }
   >({ kind: 'idle' });
 
   const filteredOps = useMemo(() => {
@@ -99,8 +126,54 @@ export function DiffPane({ root, onJumpToTree }: Props) {
       });
       return;
     }
+    // Paste flow: current = BEFORE, pasted = AFTER (asymmetric with
+    // the baseline flow — see header comment for why).
     const result = diffTrees(root, parseResult.root);
-    setDiffState({ kind: 'success', ops: result.ops });
+    setDiffState({ kind: 'success', ops: result.ops, source: 'paste' });
+  };
+
+  const handleSaveBaseline = () => {
+    if (docText.trim() === '') {
+      toast.error('No JSON loaded to save as baseline.');
+      return;
+    }
+    const result = saveBaseline(docText);
+    if (!result.ok) {
+      if (result.reason === 'too-large') {
+        toast.error(
+          `Document too large to save as baseline — ${formatBytes(result.size)} > ${formatBytes(result.limit)} cap.`,
+        );
+      } else {
+        toast.error(`Could not save baseline: ${result.message}`);
+      }
+      return;
+    }
+    setBaseline(loadBaseline());
+    toast.success('Baseline saved.');
+  };
+
+  const handleClearBaseline = () => {
+    clearBaseline();
+    setBaseline(null);
+    toast('Baseline cleared.');
+  };
+
+  const handleCompareToBaseline = () => {
+    if (baseline === null || root === null) return;
+    const parsed = parseToTree(baseline.text);
+    if (!parsed.ok) {
+      // Stored baseline is unparseable — schema migration, manual
+      // localStorage edit, etc. Surface + clear; user can re-save.
+      toast.error('Saved baseline is corrupted — cleared.');
+      clearBaseline();
+      setBaseline(null);
+      return;
+    }
+    // Baseline flow: baseline = BEFORE (the known-good reference),
+    // current = AFTER ("what I'm checking"). "Removed in current"
+    // means the current document lost a field the baseline had.
+    const result = diffTrees(parsed.root, root);
+    setDiffState({ kind: 'success', ops: result.ops, source: 'baseline' });
   };
 
   const handleOpClick = (op: DiffOp) => {
@@ -151,6 +224,66 @@ export function DiffPane({ root, onJumpToTree }: Props) {
             </>
           )}
         </div>
+        {/* Baseline section: persistent storage for a "working sample"
+            to compare future loads against. Two states — no baseline
+            (single Save button) or baseline saved (status chip + 3
+            actions). Note the direction flip for baseline compare:
+            baseline is BEFORE, current is AFTER — opposite of the
+            paste flow. */}
+        <div
+          className="rounded-md border border-dashed px-2 py-1.5"
+          data-testid="diff-baseline-section"
+        >
+          {baseline === null ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground text-xs">
+                No baseline saved.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveBaseline}
+                disabled={empty}
+                data-testid="diff-save-baseline"
+              >
+                Save current as baseline
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-muted-foreground text-xs">
+                <strong className="font-medium">Baseline saved</strong>{' '}
+                {formatRelativeTime(baseline.savedAt)} ({formatBytes(baseline.bytes)})
+              </span>
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={handleCompareToBaseline}
+                  disabled={empty}
+                  data-testid="diff-compare-baseline"
+                >
+                  Compare to baseline
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveBaseline}
+                  disabled={empty}
+                >
+                  Replace
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleClearBaseline}
+                  data-testid="diff-clear-baseline"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
         <textarea
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
@@ -186,6 +319,13 @@ export function DiffPane({ root, onJumpToTree }: Props) {
         </div>
         {diffState.kind === 'parse-error' && (
           <div className="text-destructive text-xs">{diffState.message}</div>
+        )}
+        {diffState.kind === 'success' && (
+          <div className="text-muted-foreground text-[10px] leading-tight">
+            {diffState.source === 'baseline'
+              ? `Comparing baseline (saved ${formatRelativeTime(baseline?.savedAt ?? 0)}) → current document`
+              : 'Comparing current document → pasted JSON'}
+          </div>
         )}
         {summary !== null && diffState.kind === 'success' && (
           <div className="text-muted-foreground flex flex-wrap gap-2 text-xs">
@@ -319,6 +459,12 @@ function previewValue(value: unknown): string {
     default:
       return '';
   }
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
 }
 
 // Same ancestor-walk pattern as QueryPane. RFC 6901 pointer segments

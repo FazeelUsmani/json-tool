@@ -67,6 +67,42 @@ test('Diff: tab disabled until JSON is loaded', async ({ page }) => {
   await expect(diffTab).toBeDisabled();
 });
 
+test('Diff: save baseline → compare-to-baseline → clear', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByTestId('sample-llm-json').click();
+  await expect(
+    page.getByText('"summary"', { exact: false }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+
+  await page.getByRole('tab', { name: /^diff$/i }).click();
+
+  // Initially: no baseline saved → "Save current as baseline" button.
+  const saveButton = page.getByTestId('diff-save-baseline');
+  await expect(saveButton).toBeVisible();
+  await saveButton.click();
+
+  // After save: status chip appears + Compare/Replace/Clear actions.
+  await expect(
+    page.getByTestId('diff-baseline-section').getByText(/baseline saved/i),
+  ).toBeVisible({ timeout: 2_000 });
+  const compareButton = page.getByTestId('diff-compare-baseline');
+  await expect(compareButton).toBeVisible();
+
+  // Compare current to baseline (just saved → should be identical).
+  await compareButton.click();
+
+  // Status indicator shows the baseline-direction labelling.
+  await expect(
+    page.getByText(/comparing baseline.*→ current document/i),
+  ).toBeVisible({ timeout: 2_000 });
+
+  // Clear baseline → status chip disappears, Save button reappears.
+  await page.getByTestId('diff-clear-baseline').click();
+  await expect(saveButton).toBeVisible({ timeout: 2_000 });
+});
+
 test('Diff: parse-error on invalid pasted JSON', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('sample-llm-json').click();
