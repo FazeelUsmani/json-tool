@@ -27,13 +27,21 @@ test('Repair → Apply replaces text + closes dialog cleanly (no DiffEditor race
     .getByText('Drop a JSON file here')
     .waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('Drop a JSON file here').click();
-  // Monaco's textarea isn't auto-focused by click-to-mount — only
-  // the editor div is rendered. We must explicitly focus the
-  // textarea before keyboard.type or the keys go to body.
-  const monacoTextarea = page.locator('.monaco-editor textarea').first();
-  await monacoTextarea.waitFor({ state: 'attached', timeout: 10_000 });
-  await monacoTextarea.focus();
-  await page.keyboard.type(BROKEN_JSON);
+  // Wait for Monaco's .view-lines (its rendered content area) to be
+  // visible — signals the editor instance is fully mounted, not just
+  // the textarea attached. Then click the editor surface so Monaco's
+  // own mousedown handler focuses the textarea + positions the cursor.
+  // Programmatic .focus() on the off-screen textarea doesn't fire
+  // onFocus on the editor instance reliably across timing windows.
+  await page.locator('.monaco-editor .view-lines').first().waitFor({
+    state: 'visible',
+    timeout: 10_000,
+  });
+  await page.locator('.monaco-editor').first().click();
+  // insertText (CDP Input.insertText) bypasses per-key dispatch, so
+  // Monaco's auto-bracket-pair doesn't fire on the leading `{` and
+  // mangle the content. The model receives BROKEN_JSON verbatim.
+  await page.keyboard.insertText(BROKEN_JSON);
 
   await page.getByRole('button', { name: /repair/i }).click();
   // Dialog opens with diff editor + Apply / Cancel buttons.

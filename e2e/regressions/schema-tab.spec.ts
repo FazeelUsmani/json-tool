@@ -17,7 +17,7 @@ test('Schema tab: first click triggers inference + renders output', async ({
 
   // Wait for tree to settle.
   await expect(
-    page.getByText('"events"', { exact: false }).first(),
+    page.getByText('"timestamp"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
 
   // Click Schema tab.
@@ -38,7 +38,7 @@ test('Schema tab: edit text → staleness dot appears on Refresh', async ({
   await page.goto('/');
   await page.getByTestId('sample-telemetry').click();
   await expect(
-    page.getByText('"events"', { exact: false }).first(),
+    page.getByText('"timestamp"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
 
   // Trigger first inference so there's a cached result to go stale.
@@ -51,10 +51,20 @@ test('Schema tab: edit text → staleness dot appears on Refresh', async ({
   // to invalidate. (Tree pane is the default; tab change triggers
   // re-render but doesn't unmount Monaco.)
   await page.getByRole('tab', { name: /tree/i }).click();
-  // Focus Monaco's textarea + add a character to force a reparse.
-  // Monaco's contenteditable area accepts keyboard input directly.
-  await page.locator('.monaco-editor textarea').first().focus();
-  await page.keyboard.type(' '); // trailing space — harmless edit
+  // Click Monaco's editor surface to focus its textarea via the
+  // editor's own mousedown handler — programmatic .focus() on the
+  // off-screen textarea doesn't fire onFocus listeners on the editor
+  // instance reliably. Wait for .view-lines first so the editor is
+  // fully mounted before we click.
+  await page.locator('.monaco-editor .view-lines').first().waitFor({
+    state: 'visible',
+    timeout: 10_000,
+  });
+  await page.locator('.monaco-editor').first().click();
+  // insertText goes through CDP's Input.insertText — bypasses Monaco's
+  // auto-bracket-pair (irrelevant for a space, but consistent with the
+  // repair-dialog typing pattern).
+  await page.keyboard.insertText(' ');
 
   // Schema tab's Refresh button should now show stale-dot.
   // The button's title attribute changes to "Tree has changed since

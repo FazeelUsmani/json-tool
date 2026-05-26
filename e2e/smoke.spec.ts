@@ -19,9 +19,10 @@ test('cold load → click Telemetry sample → tree pane populates', async ({
   await page.getByTestId('sample-telemetry').click();
 
   // After the sample loads, documentStore.text is non-empty AND the
-  // tree pane renders the parsed structure. The top-level key from the
-  // telemetry sample is `events`, so the tree should display it.
+  // tree pane renders the parsed structure. The sample is an array of
+  // event objects, each with a `timestamp` key — assert that as the
+  // populated-tree canary.
   await expect(
-    page.getByText('"events"', { exact: false }).first(),
+    page.getByText('"timestamp"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
 });

@@ -56,10 +56,15 @@ test('TablePane sort on stub-backed NDJSON produces real order, not null-bucket'
 
   // Table headers should include the fixture's columns: id, name,
   // score, nested. (nested column may render as `{…}` placeholder.)
-  await expect(page.getByRole('columnheader', { name: /score/i })).toBeVisible();
+  // TablePane renders headers as `<button>` elements (no <th> markup
+  // → no implicit columnheader role). Each column has a unique header
+  // name so the button selector is unambiguous. Full table-ARIA
+  // (role=table/row/cell/columnheader wrapping) is a separate a11y
+  // concern, filed as a follow-up.
+  await expect(page.getByRole('button', { name: /score/i })).toBeVisible();
 
   // Click the `score` header to sort ascending.
-  await page.getByRole('columnheader', { name: /score/i }).click();
+  await page.getByRole('button', { name: /score/i }).click();
 
   // After sort, the first three visible rows' `score` cells should be
   // in ascending order. With the bug, all rows would clump at the

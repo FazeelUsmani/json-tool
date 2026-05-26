@@ -14,7 +14,7 @@ test('Tree keyboard nav: arrows move focus + ArrowRight expands stubs', async ({
   // Load Telemetry sample to give the tree something to navigate.
   await page.getByTestId('sample-telemetry').click();
   await expect(
-    page.getByText('"events"', { exact: false }).first(),
+    page.getByText('"timestamp"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
 
   // The tree pane's container has the keyboard handler. Click into it
@@ -49,7 +49,7 @@ test('Tree keyboard nav: Escape clears search', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('sample-telemetry').click();
   await expect(
-    page.getByText('"events"', { exact: false }).first(),
+    page.getByText('"timestamp"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
 
   // Type into the tree-pane search input. The placeholder text comes

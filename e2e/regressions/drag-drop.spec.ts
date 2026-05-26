@@ -59,11 +59,14 @@ test('large file drop (>10 MB) pivots to viewer-only mode', async ({
   page,
 }) => {
   await page.goto('/');
-  // VIEWER_ONLY_THRESHOLD = 10 MiB. Synthesize a ~12 MB JSON: array
-  // of 200000 identical small objects. The streaming parser produces
-  // stubs past depth 2 but the root array is materialized normally.
+  // VIEWER_ONLY_THRESHOLD = 10 MiB. Synthesize a ~14 MB JSON: array
+  // of 200000 objects each ~70 chars. With `tag: 'x'` (1 char) we
+  // only hit ~4.6 MB and stay below the threshold; the 50-char tag
+  // pushes per-object size up so the array crosses 10 MiB and the
+  // viewer-only pivot engages.
+  const PADDED_TAG = 'x'.repeat(50);
   const objects: Array<{ id: number; tag: string }> = [];
-  for (let i = 0; i < 200000; i++) objects.push({ id: i, tag: 'x' });
+  for (let i = 0; i < 200000; i++) objects.push({ id: i, tag: PADDED_TAG });
   const content = JSON.stringify(objects);
 
   await dropFile(page, {
