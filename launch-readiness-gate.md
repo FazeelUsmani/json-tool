@@ -7,7 +7,7 @@ Sources:
 - This session's audit re-verification (2026-05-22 evening) — independently confirmed the dompurify finding
 - Existing `PLAN.MD` Month-1 verification list
 
-Last updated: **2026-05-25**.
+Last updated: **2026-05-26**.
 
 ---
 
@@ -99,6 +99,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 - [ ] **`viewStore.ts` split** into `viewState` + `parserSession` — explicit "tipping point" note in the file itself.
 - [ ] **TreeView orchestration extraction** — parse dispatch, NDJSON detection, search orchestration, keyboard wiring all in one 500-line file.
 - [x] **Monaco chunk tree-shake** — closed 2026-05-26. Switched `src/lib/monaco/init.ts` from `import * as monaco from 'monaco-editor'` to `'monaco-editor/esm/vs/editor/editor.api'` + corresponding `manualChunks` update in `vite.config.ts` + ambient module shim at `src/types/monaco-shims.d.ts` (TS bundler resolution couldn't find `.d.ts` via the package's `./*` exports map). Drops `ts.worker` (7 MB), `css.worker` (1 MB), `html.worker` (693 KB), and ~30 obscure language modules (~500 KB) from `dist/`. **PWA precache: 14246 KiB → 5198 KiB (9 MB shaved).** Cold-load Lighthouse Performance score should rise correspondingly — verify post-deploy. (2026-05-22 review §6 Suggested Improvement #10)
+    - **2026-05-26 — verified.** Parent-commit build (`git worktree add /tmp/json-tool-pre-tree-shake 98ff9ce; npm run build`) confirmed pre-shake precache at **14246.22 KiB / 124 entries** vs. HEAD's **5198.7 KiB / 37 entries** → 9 MB shaved matches the commit claim exactly. Pre-shake `dist/assets/` carried `ts.worker.js` (6.7 MB), `css.worker.js` (1.0 MB), `html.worker.js` (680 KB), `monaco-*.js` (3.6 MB vs. HEAD's 2.5 MB) plus ~30 unused-language modules (abap, apex, csharp, java, …) — all absent at HEAD. Lighthouse cold-load verification still pending post-deploy.
 - [ ] **NDJSON indexing in worker** — currently main-thread (~200ms allocation + ~100ms scan on 200MB). Acceptable today; worker offload deferred.
 - [ ] **Incremental / segmented flatten** — `FlatRow[]` is rebuilt on every parse + every stub expand. Largest measured case (2.25M rows at 505MB) still works; defer until profiling shows a regression. Worth tracking so a future fixture doesn't surprise us. (2026-05-22 review §2 Suggested Improvement #6)
 - [ ] **Remove dompurify override** — currently forced to `^3.4.5` via `package.json` `overrides` (slice 4 close-out, 2026-05-25). Drop the override when Monaco ships a stable release bundling `dompurify >= 3.4.0` upstream. Track via `npm view monaco-editor dependencies` periodically; see `docs/dependency-overrides.md` for the full revert checklist. (Same applies to the `qs ^6.15.2` override — drop once shadcn / express bump their pins.)
