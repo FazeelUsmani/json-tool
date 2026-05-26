@@ -20,7 +20,7 @@ No new user-facing features ship between 2026-05-26 and the brand-decision close
 | In scope (engineering-actionable now) | Out of scope until brand lands |
 |---|---|
 | SEO-stub honesty markers (this slice) | New routes / new features / new UI surfaces |
-| Perf-claim re-walk against methodology.md (task #93) | JSONPath / jq / email capture (cut to M2 — see PLAN.MD §Month-1 cut decisions) |
+| Perf-claim re-walk against methodology.md (task #93) | jq query bar + email capture (cut to M2 — see PLAN.MD §Month-1 cut decisions). JSONPath query bar was uncut 2026-05-26 — see same section. |
 | Bug fixes for shipped features | Anything that bakes a name/wordmark into copy |
 | Audit-response carry-forwards explicitly named in this doc | Anything reachable from `brand-pending:` grep |
 

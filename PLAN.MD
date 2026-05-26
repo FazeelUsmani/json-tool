@@ -28,8 +28,8 @@ Codified per the 2026-05-22 review §7 Suggested Improvement #1+#2 — "freeze n
 
 **Cut to Month 2:**
 
-- **JSONPath query bar** — explicit cut. Reasoning: brand decision + SEO content + customer discovery are the binding constraints on launch; JSONPath is a feature, not a launch gate. Re-prioritize in M2 based on cold-email + customer-call signal (the "do you use JSONPath / jq?" question is on the discovery script).
-- **jq query bar** — same reasoning + larger scope (jq-wasm is ~1 MB + worker host + UI). The "Email capture — specific value exchange" CLI tease can be re-evaluated post-launch.
+- **JSONPath query bar** — **uncut 2026-05-26 (later same day)**: user direction restored JSONPath to M1 scope. Implementation underway. Reasoning for the reversal: smallest of the three cut items (~3-4 h), brand-decoupled (no brand-name copy in the UI surface), real product value (people search "jsonpath online" — measurable SEO + utility). The original cut reasoning (customer-call signal should drive M2 priorities) still holds for jq + email capture; this carve-out is intentional and scoped.
+- **jq query bar** — explicit cut, **unchanged**. Same reasoning + larger scope (jq-wasm is ~1 MB + worker host + UI). The "Email capture — specific value exchange" CLI tease can be re-evaluated post-launch.
 - **Email capture** — explicit cut. Reasoning: newsletter destination + CLI packaging + Resend/Postmark integration are non-trivial side work that drains attention from the launch gates. Capture mechanism re-prioritizes on first user signal post-launch. The "Email capture — specific value exchange" section below is **superseded**.
 
 **Feature freeze through brand decision:** no new user-facing features ship between 2026-05-26 and brand-decision close-out. Engineering-actionable carry-forwards tracked in `launch-readiness-gate.md` §Feature freeze.
