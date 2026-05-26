@@ -166,9 +166,14 @@ export function RightPane() {
       </TabsContent>
       <TabsContent
         value="query"
-        // Query is mount-on-demand like Table — jsonpath-plus runs
-        // on every debounced keystroke and the result list can be
-        // long, so don't pay the cost when the tab is inactive.
+        // forceMount preserves the input value + result list across
+        // tab switches: user types a query, clicks a result, lands
+        // on Tree, comes back to Query — expects to see what they
+        // just searched. Without forceMount the component remounts
+        // fresh and the user loses context. jsonpath-plus only runs
+        // on debounced input changes, so leaving the component
+        // mounted-but-hidden doesn't re-run anything.
+        forceMount
         className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden"
       >
         <QueryPane
