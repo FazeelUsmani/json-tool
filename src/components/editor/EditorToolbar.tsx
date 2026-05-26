@@ -12,8 +12,24 @@ import {
 } from '@/lib/json/format';
 import { repair } from '@/lib/json/repair';
 import { fetchUrl, type FetchUrlError } from '@/lib/net/fetchUrl';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { MAX_FILE_BYTES, VIEWER_ONLY_THRESHOLD } from './constants';
 import { RepairDialog } from './RepairDialog';
+import { ShareDialog } from './ShareDialog';
+
+// Cheap raw-byte gate before opening the Share dialog. Real ceiling
+// is on the *encoded* string (DEFAULT_ENCODED_LIMIT = 7500 chars to
+// keep URLs under 8 KB), but encoding on every keystroke just to keep
+// the button's disabled state honest would be wasteful. Heuristic:
+// typical JSON compresses ~5×, conservative pessimist is ~2×, so
+// raw > 2 × encoded-limit ≈ 15 KB is unlikely to fit. Below this
+// threshold, click → encode in the dialog → dialog handles the rare
+// "borderline + uncompressible" case with the oversize state.
+const SHARE_RAW_BYTE_LIMIT = 15_000;
 
 type Transform = (text: string) => FormatResult;
 
@@ -40,6 +56,22 @@ export function EditorToolbar({ error, setError }: Props) {
     before: string;
     after: string;
   } | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Use source.size when available (file/url load — already-known byte
+  // count); fall back to text.length for paste/sample (string length
+  // ≈ UTF-8 bytes for the ASCII-heavy JSON case, slight under-count
+  // for multi-byte content but conservative-enough for the gate).
+  const rawByteEstimate =
+    source?.kind === 'file' || source?.kind === 'url' || source?.kind === 'sample'
+      ? source.size
+      : text.length;
+  const shareDisabled =
+    text.trim() === '' || rawByteEstimate > SHARE_RAW_BYTE_LIMIT;
+  const shareDisabledReason =
+    text.trim() === ''
+      ? 'Nothing to share — paste some JSON first.'
+      : `Document is ${(rawByteEstimate / 1024).toFixed(1)} KB — too large to fit in a share URL. Save as a file instead.`;
 
   const handleRepair = () => {
     if (text.trim() === '') {
@@ -158,6 +190,28 @@ export function EditorToolbar({ error, setError }: Props) {
         <Button variant="outline" size="sm" onClick={handleRepair}>
           Repair
         </Button>
+        {/* Tooltip wraps a span (not the button) because disabled
+            buttons don't fire pointerenter — without the span the
+            tooltip-on-disabled wouldn't show. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+                disabled={shareDisabled}
+              >
+                Share
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {shareDisabled && (
+            <TooltipContent className="max-w-xs">
+              {shareDisabledReason}
+            </TooltipContent>
+          )}
+        </Tooltip>
         <Input
           value={urlInput}
           onChange={(e) => setUrlInput(e.target.value)}
@@ -204,6 +258,11 @@ export function EditorToolbar({ error, setError }: Props) {
         after={repairCandidate?.after ?? ''}
         onApply={applyRepair}
         onCancel={() => setRepairCandidate(null)}
+      />
+      <ShareDialog
+        open={shareOpen}
+        text={text}
+        onClose={() => setShareOpen(false)}
       />
     </div>
   );

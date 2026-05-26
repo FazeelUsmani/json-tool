@@ -9,31 +9,52 @@
     <!-- Title + meta description are injected per-route via vite-react-ssg's <Head>. -->
     <script src="/theme-init.js"></script>
     <!--
-      Synchronous ?url= strip — MUST execute before the Plausible
-      script tag below. Plausible's auto-pageview event captures
-      window.location.href at script-load time; if `?url=...` is
-      still in the bar at that moment, the param leaks to analytics
-      (also to browser history + referrer chain on outbound nav).
-      Slice 3.5's React-side strip ran too late — it lives in
-      useEffect, which fires AFTER React mount AND AFTER Plausible's
-      pageview. This inline script runs synchronously during HTML
-      parsing, before Plausible's deferred script even queues.
+      Synchronous ?url= and #json= strip — MUST execute before the
+      Plausible script tag below. Plausible's auto-pageview event
+      captures window.location.href at script-load time, which
+      includes BOTH query and fragment; if `?url=…` or `#json=…` is
+      still in the bar at that moment, the payload leaks to analytics
+      (and to browser history + referrer chain on outbound nav).
+      Earlier React-side strips ran too late — they lived in useEffect,
+      which fires AFTER React mount AND AFTER Plausible's pageview.
+      This inline script runs synchronously during HTML parsing,
+      before Plausible's deferred script even queues.
 
-      We stash the value on document.documentElement.dataset so
-      EditorToolbar's useEffect can still pre-fill the URL input
-      (the "?url= as convenience pre-fill" UX from slice 3.5).
-      Closes Mahira §5 weakness 2 properly. See
-      launch-readiness-gate.md.
+      We stash the values on document.documentElement.dataset so
+      consumers can pick them up after mount:
+        - pendingUrl  → EditorToolbar pre-fills the URL input
+        - pendingShareText → useShareHashLoad decodes + loads into editor
+      See launch-readiness-gate.md (2026-05-22 review §5 weakness 2).
     -->
     <script>
       (function () {
         try {
           var u = new URL(window.location.href);
-          var pending = u.searchParams.get('url');
-          if (pending != null) {
-            document.documentElement.dataset.pendingUrl = pending;
+          var pendingUrl = u.searchParams.get('url');
+          if (pendingUrl != null) {
+            document.documentElement.dataset.pendingUrl = pendingUrl;
             u.searchParams.delete('url');
-            window.history.replaceState({}, '', u.toString());
+          }
+          // Hash carries share-link payload as `#json=<lz-encoded>`.
+          // We stash the raw encoded payload (decompression lives in
+          // the React layer to keep this inline script tiny — pulling
+          // lz-string into index.html would bloat first-byte).
+          var hashRaw = window.location.hash;
+          var hasShareHash =
+            hashRaw && hashRaw.indexOf('#json=') === 0;
+          if (hasShareHash) {
+            document.documentElement.dataset.pendingShareText =
+              hashRaw.slice('#json='.length);
+          }
+          if (pendingUrl != null || hasShareHash) {
+            // Build the clean URL from pathname + (possibly-stripped)
+            // search directly — using `u.toString()` after `u.hash=''`
+            // produced an unreliable strip in Playwright's frame.url()
+            // tracking (the navigation-event reporter didn't always
+            // pick up the hash removal). pathname + search guarantees
+            // no fragment in the replaced URL.
+            var cleanUrl = u.pathname + (u.search || '');
+            window.history.replaceState({}, '', cleanUrl);
           }
         } catch (_) {
           /* If URL parsing fails for any reason, fall through —
