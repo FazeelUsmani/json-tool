@@ -14,12 +14,14 @@
 // type union for no behavioral payoff yet.
 
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { decodeShareHash } from './share';
 import { useDocumentStore } from '@/state/documentStore';
 
 export function useShareHashLoad(): void {
   const setText = useDocumentStore((s) => s.setText);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // SSR safety — `document` doesn't exist during the vite-react-ssg
@@ -61,5 +63,15 @@ export function useShareHashLoad(): void {
       return;
     }
     setText(result.text, { kind: 'paste' });
-  }, [setText]);
+
+    // Redirect to `/` if the share link came in on an SEO sub-route
+    // (e.g. `/json-viewer#json=…`). MonacoPane + tree only render on
+    // `/`; without the redirect the user would land on the placeholder
+    // page with no editor, even though documentStore holds the JSON.
+    // documentStore is Zustand (module-scope) so the text persists
+    // across the route change.
+    if (window.location.pathname !== '/') {
+      navigate('/', { replace: true });
+    }
+  }, [setText, navigate]);
 }

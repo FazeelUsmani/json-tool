@@ -33,7 +33,7 @@ export default defineConfig(({ isSsrBuild }) => ({
       manifest: {
         name: BRAND_NAME,
         short_name: BRAND_SHORT,
-        description: 'Free in-browser JSON viewer, formatter, and validator. 100% client-side.',
+        description: 'Free in-browser JSON viewer, formatter, and validator. We never see your data.',
         theme_color: BRAND_THEME,
         background_color: '#ffffff',
         display: 'standalone',

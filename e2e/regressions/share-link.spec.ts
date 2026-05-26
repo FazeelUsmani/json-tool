@@ -65,6 +65,50 @@ test('Share round-trip: encode → navigate → decode + hash stripped', async (
   await recipientPage.close();
 });
 
+test('Share link landing on a sub-route redirects to / + loads content', async ({
+  page,
+  context,
+}) => {
+  // Reviewer-caught bug (2026-05-26): useShareHashLoad used to mount
+  // only on `/` (in App.tsx). The inline strip in index.html runs on
+  // EVERY route, so `/json-viewer#json=…` would strip the hash, stash
+  // the payload, and then no consumer would pick it up — payload
+  // silently lost. Fix hoisted the hook to RootLayout (every route).
+  // This spec pins the cross-route consume + redirect-to-/ behavior.
+  await page.goto('/');
+  await page.getByTestId('sample-llm-json').click();
+  await expect(
+    page.getByText('"summary"', { exact: false }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: /share/i }).click();
+  const url = await page.getByTestId('share-link-input').inputValue();
+  const hashStart = url.indexOf('#');
+  expect(hashStart).toBeGreaterThan(-1);
+  const hash = url.slice(hashStart);
+
+  // Open on /json-viewer (an SEO sub-route, NOT /). Fresh tab so the
+  // inline strip runs from scratch.
+  const recipient = await context.newPage();
+  await recipient.goto(`/json-viewer${hash}`);
+
+  // Content loads in the editor — proves useShareHashLoad fired on
+  // the sub-route via RootLayout mount.
+  await expect(
+    recipient.getByText('"summary"', { exact: false }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+
+  // After consume, the hook navigates to `/` so the editor renders.
+  // Verify via window.location.pathname (page.url() can lag behind
+  // SPA navigations).
+  const livePath = await recipient.evaluate(() => window.location.pathname);
+  expect(livePath).toBe('/');
+  // Hash is stripped too.
+  const liveHref = await recipient.evaluate(() => window.location.href);
+  expect(liveHref).not.toContain('#json=');
+
+  await recipient.close();
+});
+
 test('Share button is disabled with empty document', async ({ page }) => {
   await page.goto('/');
   // Empty state hero is showing — no document loaded → Share
