@@ -15,6 +15,7 @@ export function Component() {
         />
       </Head>
       <main className="mx-auto max-w-3xl px-6 py-16">
+        <StubBanner />
         <h1 className="text-4xl font-bold tracking-tight">NDJSON Viewer</h1>
         <p className="text-muted-foreground mt-4 text-lg leading-relaxed">
           Open NDJSON / JSON Lines files in your browser — logs, LLM training
@@ -35,6 +36,27 @@ export function Component() {
         </ul>
       </main>
     </>
+  );
+}
+
+// Brand-pending honesty marker. See JsonViewer.tsx StubBanner for the
+// rationale (2026-05-22 review §7 SI #3). Duplicated across the 4
+// per-route pages because they don't yet share a Hero layout — a
+// future refactor can lift this into a shared component once the
+// pages diverge less.
+function StubBanner() {
+  return (
+    <div className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 mb-6 rounded-md border px-4 py-3 text-sm">
+      <strong className="font-medium">Placeholder page.</strong>{' '}
+      <span className="text-muted-foreground">
+        Real content lands with the brand decision. The app itself
+        works at the{' '}
+        <a href="/" className="underline">
+          main viewer
+        </a>
+        .
+      </span>
+    </div>
   );
 }
 

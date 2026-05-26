@@ -18,6 +18,24 @@ Building the **free public JSON tool** that serves as the acquisition funnel for
 
 ---
 
+## Month-1 cut decisions (2026-05-26)
+
+Codified per the 2026-05-22 review §7 Suggested Improvement #1+#2 — "freeze new features until launch gates closed" + "decide explicitly whether JSONPath/jq/share/email capture are cut." The decisions below override conflicting day-by-day plans in the Week 4 table and the "Share UX" / "Email capture" sections that follow (both **superseded** as noted).
+
+**Shipped in Month 1:**
+
+- **Share links (URL-hash, no server)** — committed 2026-05-26 (`98a3bdf`). Different architecture from the original PLAN.MD spec below: the JSON is compressed into the URL fragment via lz-string, never reaches a server. Result: the "Share UX — explicit privacy contract" section below is **superseded** — no consent modal, no KV/R2 backend, no badge color change needed because the privacy claim ("we never see your data") stays symmetric across paste/drop/sample/URL load/share-link.
+
+**Cut to Month 2:**
+
+- **JSONPath query bar** — explicit cut. Reasoning: brand decision + SEO content + customer discovery are the binding constraints on launch; JSONPath is a feature, not a launch gate. Re-prioritize in M2 based on cold-email + customer-call signal (the "do you use JSONPath / jq?" question is on the discovery script).
+- **jq query bar** — same reasoning + larger scope (jq-wasm is ~1 MB + worker host + UI). The "Email capture — specific value exchange" CLI tease can be re-evaluated post-launch.
+- **Email capture** — explicit cut. Reasoning: newsletter destination + CLI packaging + Resend/Postmark integration are non-trivial side work that drains attention from the launch gates. Capture mechanism re-prioritizes on first user signal post-launch. The "Email capture — specific value exchange" section below is **superseded**.
+
+**Feature freeze through brand decision:** no new user-facing features ship between 2026-05-26 and brand-decision close-out. Engineering-actionable carry-forwards tracked in `launch-readiness-gate.md` §Feature freeze.
+
+---
+
 ## Architecture — huge-JSON path (the load-bearing piece)
 
 ```mermaid
@@ -326,7 +344,7 @@ Target: **live public URL by Friday** with 4 deep SEO routes (not 8 thin ones).
 
 ## Week 5 — Audit response (2026-05-25 onward)
 
-Off-plan correctness + production-gate work surfaced by `ENGINEERING_ASSESSMENT.md` (Mahira, 2026-05-22). Closes ship-blockers, not features. Punch list in `launch-readiness-gate.md`; per-commit detail in `CHANGELOG.md`.
+Off-plan correctness + production-gate work surfaced by `ENGINEERING_ASSESSMENT.md` (2026-05-22). Closes ship-blockers, not features. Punch list in `launch-readiness-gate.md`; per-commit detail in `CHANGELOG.md`.
 
 | Day | Shipped / planned |
 |---|---|

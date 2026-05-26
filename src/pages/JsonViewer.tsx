@@ -41,6 +41,7 @@ function Hero({
 }) {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
+      <StubBanner />
       <h1 className="text-4xl font-bold tracking-tight">{h1}</h1>
       <p className="text-muted-foreground mt-4 text-lg leading-relaxed">
         {lede}
@@ -56,6 +57,29 @@ function Hero({
         ))}
       </ul>
     </main>
+  );
+}
+
+// Brand-pending honesty marker. Rendered above every per-route SEO
+// page hero until real content lands (gated on the brand decision per
+// launch-readiness-gate.md). The 2026-05-22 review §7 SI #3 called
+// out the gap between "we shipped 4 routes" and "the routes claim to
+// be a JSON viewer landing page when they're hero+bullets stubs" —
+// this banner closes the honesty gap without removing the routes
+// (which would break the SSG infrastructure that's already wired).
+function StubBanner() {
+  return (
+    <div className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 mb-6 rounded-md border px-4 py-3 text-sm">
+      <strong className="font-medium">Placeholder page.</strong>{' '}
+      <span className="text-muted-foreground">
+        Real content lands with the brand decision. The app itself
+        works at the{' '}
+        <a href="/" className="underline">
+          main viewer
+        </a>
+        .
+      </span>
+    </div>
   );
 }
 

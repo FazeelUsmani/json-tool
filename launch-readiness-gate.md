@@ -11,6 +11,28 @@ Last updated: **2026-05-26**.
 
 ---
 
+## Feature freeze (2026-05-26 → brand decision)
+
+No new user-facing features ship between 2026-05-26 and the brand-decision close-out. Codified per the 2026-05-22 review §7 Suggested Improvement #1 ("freeze new features until launch gates are closed"). Rationale: brand → SEO copy → robots flip → cold-email → customer discovery is the binding launch path. Adding feature surface in parallel accumulates work that needs revisiting once the brand decision lands (placeholder copy gets rewritten, UI components get re-themed, etc.).
+
+**Scope of the freeze:**
+
+| In scope (engineering-actionable now) | Out of scope until brand lands |
+|---|---|
+| SEO-stub honesty markers (this slice) | New routes / new features / new UI surfaces |
+| Perf-claim re-walk against methodology.md (task #93) | JSONPath / jq / email capture (cut to M2 — see PLAN.MD §Month-1 cut decisions) |
+| Bug fixes for shipped features | Anything that bakes a name/wordmark into copy |
+| Audit-response carry-forwards explicitly named in this doc | Anything reachable from `brand-pending:` grep |
+
+**Pre-freeze close-outs (already shipped this session):**
+
+- Share links v1 (URL-hash, no server) — grandfathered through because it was a queued Month-1 commitment with brand-agnostic mechanics (`98a3bdf`, 2026-05-26).
+- Privacy-claim narrowing audit — closes 2026-05-22 review §7 Red Flag 3 (`2335161`, 2026-05-26).
+
+**Effective date:** 2026-05-26. **Lifts on:** brand decision + sitemap + robots flip going live together.
+
+---
+
 ## Hard blockers — must fix before public URL goes live
 
 These are correctness / claim-alignment items that would either (a) break for real-world users, (b) make public claims false, or (c) embarrass the project on technical review (HN comments).
