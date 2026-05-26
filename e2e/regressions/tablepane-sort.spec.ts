@@ -70,40 +70,31 @@ test('TablePane sort on stub-backed NDJSON produces real order, not null-bucket'
   // in ascending order. With the bug, all rows would clump at the
   // null-at-end bucket (every cell appears in input order, not sorted).
   //
-  // The fixture's scores are (i * 137) % 100 for i in [0,20):
+  // The fixture's scores are (i * 137) % 100 for i in [1,20]:
   //   [0, 37, 74, 11, 48, 85, 22, 59, 96, 33, 70, 7, 44, 81, 18, 55, 92, 29, 66, 3]
   // Sorted ascending: [0, 3, 7, 11, 18, 22, ...].
-  // First two visible row values (in cell display order) should be
-  // strictly the smallest two: 0 then 3.
-  const firstScoreCell = page
-    .getByRole('cell')
-    .filter({ hasText: /^\d+$/ })
-    .first();
-  // Read several score cells to make the assertion resilient to row
-  // layout. Take first three numeric cells from the score column.
-  const scoreCells = page
-    .locator('[role="cell"]')
-    .filter({ hasText: /^\d+$/ });
-  await expect(firstScoreCell).toBeVisible();
+  //
+  // Per-column data-testid lets us target ONLY the score-column cells.
+  // The earlier `getByRole('cell').filter(/^\d+$/)` would also have
+  // matched id-column cells (also numeric) and the resulting DOM-order
+  // sequence interleaved id+score → assertion failed even when the
+  // sort itself was correct.
+  const scoreCells = page.getByTestId('cell-score');
+  await expect(scoreCells.first()).toBeVisible({ timeout: 5_000 });
 
-  // Extract first 3 score values (the first column's first 3 rows).
-  // Note: cell layout depends on column order; we use a robust
-  // approach — find cells whose text is the literal expected values
-  // 0 and 3 (the two smallest) and assert they appear ahead of larger
-  // values like 96 or 92 in DOM order.
   const allScoreTexts = await scoreCells.evaluateAll((nodes) =>
-    nodes.slice(0, 30).map((n) => n.textContent?.trim() ?? ''),
+    nodes.slice(0, 20).map((n) => n.textContent?.trim() ?? ''),
   );
   const numericScores = allScoreTexts
     .map((t) => Number(t))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 99);
 
-  // The bug: numericScores would be in the original ndjson line order
-  // [0, 37, 74, 11, 48, 85, ...], with `0` happening to be first by
-  // coincidence. To detect the bug reliably, check that the SECOND
-  // score is one of the two smallest (3 or 7), not the original
-  // index-1 value of 37.
+  // The bug case: numericScores would be in original line order
+  // [0, 37, 74, ...], with `0` happening to be first by coincidence.
+  // The SECOND value (3) detects the bug reliably — original-order
+  // index 1 would be 37.
   expect(numericScores.length).toBeGreaterThanOrEqual(3);
-  expect(numericScores[0]).toBe(0); // smallest, sorts to top under either path
-  expect([3, 7]).toContain(numericScores[1]); // the bug case would put 37 here
+  expect(numericScores[0]).toBe(0);
+  expect(numericScores[1]).toBe(3);
+  expect(numericScores[2]).toBe(7);
 });

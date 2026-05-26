@@ -414,6 +414,11 @@ export function TreeView() {
     <div
       ref={containerRef}
       tabIndex={0}
+      // Stable e2e selector — `[tabindex="0"]` is ambiguous because
+      // Radix Tabs adds tabindex="0" to every tabpanel (including
+      // hidden inactive ones), and `getByRole('tree')` doesn't apply
+      // since this isn't a true ARIA tree widget.
+      data-testid="tree-view"
       onMouseDown={() => containerRef.current?.focus()}
       onKeyDown={onKeyDown}
       className="ring-primary/40 flex h-full flex-col font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-inset"

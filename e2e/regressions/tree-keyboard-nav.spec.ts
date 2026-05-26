@@ -19,9 +19,11 @@ test('Tree keyboard nav: arrows move focus + ArrowRight expands stubs', async ({
 
   // The tree pane's container has the keyboard handler. Click into it
   // to focus, then use arrow keys.
-  // Selector: the tree pane is a div with tabIndex containing the
-  // virtualized rows.
-  const treePane = page.locator('[role="tree"], [tabindex="0"]').last();
+  // Stable selector: TreeView's outer div carries data-testid="tree-view".
+  // The earlier `[tabindex="0"]` fallback caught Radix's hidden inactive
+  // tabpanels (Radix Tabs sets tabindex=0 on every panel) and `.last()`
+  // resolved to a hidden one — click then failed visibility checks.
+  const treePane = page.getByTestId('tree-view');
   await treePane.click({ position: { x: 10, y: 10 } });
 
   // ArrowDown should move focus to the next row. Hard to assert focus

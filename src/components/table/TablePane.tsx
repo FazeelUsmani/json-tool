@@ -396,15 +396,28 @@ function TableRow({
           key={col.key}
           value={extractCell(state.value, col.key)}
           width={COLUMN_WIDTH}
+          columnKey={col.key}
         />
       ))}
     </>
   );
 }
 
-function Cell({ value, width }: { value: unknown; width: number }) {
+function Cell({
+  value,
+  width,
+  columnKey,
+}: {
+  value: unknown;
+  width: number;
+  columnKey: string;
+}) {
   return (
     <div
+      // Stable e2e selector — per-column testid lets specs target a
+      // specific column's cells without conflating with other numeric
+      // columns (e.g., id vs. score in tablepane-sort).
+      data-testid={`cell-${columnKey}`}
       className="truncate border-r px-2 py-1"
       style={{ width }}
       title={typeof value === 'string' ? value : undefined}
