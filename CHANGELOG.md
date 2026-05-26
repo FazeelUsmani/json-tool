@@ -149,6 +149,22 @@ git log carries the per-commit detail.
   1yr → 2yr for HSTS-preload eligibility; CSP `report-uri
   /csp-report` placeholder added (endpoint activates at
   brand-domain cutover).
+- **npm/pnpm doc sweep** — `benchmarks/methodology.md`,
+  `docs/deploy-cf-pages.md`, and the gate doc's smoke-protocol
+  section all swept from `pnpm` → `npm` so the docs match the
+  actual lockfile + CI. Only `ENGINEERING_ASSESSMENT.md` retains
+  the original `pnpm` references because it's a read-only
+  archived review. Closes the 2026-05-22 review's §6 weakness 4
+  (docs conflict npm vs pnpm).
+- **Lighthouse CI on-demand workflow** — `.github/workflows/lighthouse.yml`
+  boots `npm run preview` + runs `treosh/lighthouse-ci-action`
+  against all 5 routes, 3 runs each, median asserted. Floors:
+  Performance >= 80, Accessibility >= 90, Best Practices >= 85,
+  SEO >= 90 (config at `.github/lighthouse/lighthouserc.json`).
+  Wide on Performance because GitHub-hosted runners drift more
+  than DevTools panel numbers. `workflow_dispatch` only; promote
+  to on-PR once stable. Closes the 2026-05-22 review's §6
+  weakness 9 (no Lighthouse CI).
 - **Trusted Types wired (pending browser smoke before trust)** —
   `MonacoEnvironment.createTrustedTypesPolicy` hook in
   `src/lib/monaco/init.ts` routes Monaco's policy requests through

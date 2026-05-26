@@ -1,0 +1,72 @@
+# On-demand Lighthouse CI run. Asserts category scores on the 4 SEO
+# routes + the editor home — same routes covered by the manual
+# DevTools Lighthouse panel workflow that methodology.md uses today.
+#
+# Manual trigger only (workflow_dispatch). Lighthouse on
+# GitHub-hosted runners has well-known variance (~5-10 points
+# between runs); wide score floors deliberately catch only
+# catastrophic regressions. Promote to on-PR or schedule once we
+# have evidence the floors are stable on this runner class.
+#
+# Uses `treosh/lighthouse-ci-action` because (a) it bundles the CLI +
+# upload + assertion logic and (b) it's the most-maintained option
+# in the GitHub Actions ecosystem. Reports upload to ephemeral
+# storage (free tier) — link appears in the run log.
+
+name: Lighthouse (on-demand)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          # The 4 SEO routes per launch-readiness-gate.md sign-off
+          # checklist + the editor home. preview server URL is
+          # constructed by `serverBaseUrl` + each path.
+          urls: |
+            http://localhost:4173/
+            http://localhost:4173/json-viewer
+            http://localhost:4173/large-json-viewer
+            http://localhost:4173/ndjson-viewer
+            http://localhost:4173/json-repair
+          # Boot the preview server before lighthouse runs against it.
+          # `--strictPort` so port 4173 is required (no silent shift).
+          serverCommand: 'npm run preview -- --port 4173 --strictPort'
+          # Each URL gets 3 runs; median is the score that ratchets
+          # against the assertions. Smooths runner variance somewhat.
+          runs: 3
+          # Inline LHCI config. category floors at 80 — wide enough
+          # to absorb runner variance, narrow enough to fail on
+          # catastrophic regressions (e.g. a build that ships a
+          # multi-MB unminified bundle to the SEO routes).
+          configPath: ./.github/lighthouse/lighthouserc.json
+          uploadArtifacts: true
+
+      - name: Upload HTML reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 14
+          if-no-files-found: ignore

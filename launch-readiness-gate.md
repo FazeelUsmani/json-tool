@@ -49,7 +49,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 ### Content / SEO
 
 - [ ] **SEO landing route copy** — `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`, `/json-repair` are currently bare-bones text + one CTA. PLAN.MD targets ~1,500 words each. Brand-coupled for tone. **~4-6 hours.**
-- [ ] **README rewrite** — currently default Vite boilerplate. Replace with real setup / verify / benchmark / deploy / troubleshooting docs. Align npm/pnpm references. **~1-2 hours.** (2026-05-22 review §6 weakness 5, Top 10 #7)
+- [x] **README rewrite + npm/pnpm doc unification** — closed 2026-05-26. README replaced (`e53cc83`, brand-agnostic 80%); `benchmarks/methodology.md`, `docs/deploy-cf-pages.md`, and the smoke-protocol section all swept from `pnpm` → `npm` so the docs match the actual lockfile + CI. Only the engineering-assessment doc (`ENGINEERING_ASSESSMENT.md`) retains the original `pnpm` references because it's a read-only archived review. (2026-05-22 review §6 weakness 5, Top 10 #7)
 - [ ] **Sitemap.xml + robots.txt `Allow: /` flip** — both gated on brand domain landing. (2026-05-22 review §6 weakness 6, Top 10 #8)
 - [ ] **Unique `<title>` / `<meta>` / `<h1>` per route** — currently identical-ish across the SEO routes.
 
@@ -124,6 +124,7 @@ These are correctness / claim-alignment items that would either (a) break for re
 
 - [ ] **Production console logs** — `[parser] parseFile` / `[parser] setFlat` / `[worker] setFlat stored` etc. should be gated by `?debug=1` or a build flag. Currently always-on. (2026-05-22 review §3 weakness 4)
 - [x] **Automated perf regression gate** — closed 2026-05-25. `benchmarks/smoke-200mb.test.ts` now asserts catastrophic-tolerance thresholds (parseMs < 60s, flattenMs < 30s, rssAfterParse < 4GB, parse-error undefined, flat rows > 100k). On-demand CI workflow `.github/workflows/perf.yml` generates the 200MB fixture + runs `SMOKE=1`. Wide tolerances deliberately catch only egregious regressions; subtle slowdowns still need the methodology.md manual workflow because GitHub-hosted runner CPU variance defeats tighter thresholds. Promote to weekly schedule or self-hosted runners once stable. (2026-05-22 review §4 Red Flag #3)
+- [x] **Lighthouse CI on-demand workflow** — closed 2026-05-26. `.github/workflows/lighthouse.yml` boots `npm run preview` + runs `treosh/lighthouse-ci-action` against all 5 routes (`/`, `/json-viewer`, `/large-json-viewer`, `/ndjson-viewer`, `/json-repair`), 3 runs each, median asserted. Floors set wide to absorb runner variance: Performance >= 80, Accessibility >= 90, Best Practices >= 85, SEO >= 90 (config at `.github/lighthouse/lighthouserc.json`). HTML reports upload to artifacts + temporary-public-storage. `workflow_dispatch` only for now; promote to on-PR once floors prove stable. Manual DevTools panel runs in `methodology.md` remain the canonical record. (2026-05-22 review §6 weakness 9)
 
 ### Deferred features
 
@@ -155,7 +156,7 @@ Once hard blockers are closed and the brand domain is live, run this checklist o
 
 ## Smoke protocols
 
-Manual validation steps that close out a hard-blocker fix once the unit tests are green. Run on `pnpm/npm run build && npm run preview` — dev mode adds React strict-mode double-invokes that mask split-state bugs.
+Manual validation steps that close out a hard-blocker fix once the unit tests are green. Run on `npm run build && npm run preview` — dev mode adds React strict-mode double-invokes that mask split-state bugs.
 
 ### Path-IDs collision fix smoke (commits `c05d030` + `520692c`)
 

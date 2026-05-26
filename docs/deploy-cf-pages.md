@@ -18,7 +18,7 @@ Quickstart runbook for shipping `json-tool` to a Cloudflare Pages site under a b
 3. Production branch: `main`
 4. Build settings:
    - **Framework preset**: None (we drive the build manually)
-   - **Build command**: `pnpm install --frozen-lockfile && pnpm build`
+   - **Build command**: `npm ci && npm run build`
      - If using npm: `npm ci && npm run build`
      - Pick one and align with the lockfile in the repo
    - **Build output directory**: `dist`
