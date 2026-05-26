@@ -20,6 +20,7 @@
 
 import { JSONPath } from 'jsonpath-plus';
 import type { TreeNode } from '@/lib/tree/parse';
+import { treeNodeToPlain } from '@/lib/tree/to-plain';
 
 export type QueryMatch = {
   // RFC 6901 JSON Pointer matching the canonical node.id used across
@@ -86,32 +87,6 @@ export function runQuery(root: TreeNode, query: string): QueryResult {
   }
 }
 
-// Walks a TreeNode tree and produces a plain-JS object suitable for
-// jsonpath-plus. Stub nodes become `null` — see the file header for
-// the limitation rationale.
-function treeNodeToPlain(node: TreeNode): unknown {
-  switch (node.kind) {
-    case 'null':
-      return null;
-    case 'string':
-    case 'number':
-    case 'boolean':
-      return node.value;
-    case 'object': {
-      const out: Record<string, unknown> = {};
-      for (const c of node.children) {
-        if (c.key !== null) out[c.key] = treeNodeToPlain(c);
-      }
-      return out;
-    }
-    case 'array':
-      return node.children.map(treeNodeToPlain);
-    case 'stub-object':
-    case 'stub-array':
-    case 'ndjson-line':
-      // Stub: not materialized → invisible to the query. The UI
-      // surfaces "Match may be inside a collapsed subtree" so users
-      // can manually expand the relevant subtree and re-query.
-      return null;
-  }
-}
+// treeNodeToPlain lives in @/lib/tree/to-plain — shared with the
+// semantic-diff lib (M2 slice A) and any future TreeNode walker that
+// wants a plain-JS view. See that file for stub semantics.
