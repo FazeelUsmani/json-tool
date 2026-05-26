@@ -13,7 +13,7 @@ test('Schema tab: first click triggers inference + renders output', async ({
   await page.goto('/');
   // Load a sample to populate the tree (so schema inference has
   // something to walk).
-  await page.getByRole('button', { name: /telemetry events/i }).click();
+  await page.getByTestId('sample-telemetry').click();
 
   // Wait for tree to settle.
   await expect(
@@ -36,7 +36,7 @@ test('Schema tab: edit text → staleness dot appears on Refresh', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /telemetry events/i }).click();
+  await page.getByTestId('sample-telemetry').click();
   await expect(
     page.getByText('"events"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });

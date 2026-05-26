@@ -118,6 +118,12 @@ export function EmptyStateHero({ onActivate }: Props) {
             size="sm"
             onClick={() => loadSample(sample)}
             className="h-auto flex-col gap-0.5 px-4 py-2 text-left"
+            // Stable e2e selector. `getByRole('button', { name: ... })`
+            // is ambiguous here because the wrapping hero <div> also
+            // has role="button" (for click-to-mount), so its computed
+            // accessible name includes every sample button's text.
+            // data-testid bypasses the accessibility-tree merge.
+            data-testid={`sample-${sample.id}`}
           >
             <span className="text-xs font-medium">{sample.name}</span>
             <span className="text-muted-foreground text-[10px] font-normal">

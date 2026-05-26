@@ -22,13 +22,17 @@ test('Repair → Apply replaces text + closes dialog cleanly (no DiffEditor race
   const getErrors = await setupNoErrors(page);
   await page.goto('/');
 
-  // Click into empty-state hero to mount Monaco, then type broken JSON.
-  // (Paste path also works but type-then-Enter is more deterministic
-  // across Playwright versions than synthesizing paste events.)
+  // Click hero to mount Monaco (click-to-mount sets editorActivated).
+  await page
+    .getByText('Drop a JSON file here')
+    .waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('Drop a JSON file here').click();
-  // After click-to-mount, Monaco's textarea is focused. Use keyboard
-  // input rather than .fill() because Monaco intercepts non-standard
-  // input methods.
+  // Monaco's textarea isn't auto-focused by click-to-mount — only
+  // the editor div is rendered. We must explicitly focus the
+  // textarea before keyboard.type or the keys go to body.
+  const monacoTextarea = page.locator('.monaco-editor textarea').first();
+  await monacoTextarea.waitFor({ state: 'attached', timeout: 10_000 });
+  await monacoTextarea.focus();
   await page.keyboard.type(BROKEN_JSON);
 
   await page.getByRole('button', { name: /repair/i }).click();
@@ -52,7 +56,13 @@ test('Repair → Cancel leaves text untouched + closes cleanly', async ({
 }) => {
   const getErrors = await setupNoErrors(page);
   await page.goto('/');
+  await page
+    .getByText('Drop a JSON file here')
+    .waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('Drop a JSON file here').click();
+  const monacoTextarea = page.locator('.monaco-editor textarea').first();
+  await monacoTextarea.waitFor({ state: 'attached', timeout: 10_000 });
+  await monacoTextarea.focus();
   await page.keyboard.type(BROKEN_JSON);
 
   await page.getByRole('button', { name: /repair/i }).click();

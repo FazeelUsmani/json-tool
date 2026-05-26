@@ -83,8 +83,12 @@ test('?url= happy path: pre-fill → press Enter → fetch + tree populates', as
   // Full URL-load flow end-to-end against a Playwright-mocked endpoint.
   // The oversize / no-Content-Length cases are covered by fetchUrl
   // unit tests; this spec covers the integrated load path.
-  const FIXTURE = '/__e2e_fixtures__/url-load.json';
-  await page.route(`**${FIXTURE}`, async (route) => {
+  //
+  // FIXTURE must be ABSOLUTE — fetchUrl runs `new URL(url)` which
+  // throws on relative paths and returns { kind: 'invalid-url' }
+  // before the route mock ever fires.
+  const FIXTURE = 'http://localhost:4173/__e2e_fixtures__/url-load.json';
+  await page.route(FIXTURE, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

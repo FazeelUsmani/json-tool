@@ -11,12 +11,12 @@ test('cold load → click Telemetry sample → tree pane populates', async ({
   // Empty-state hero should be visible.
   await expect(page.getByText('Drop a JSON file here')).toBeVisible();
 
-  // Sample buttons render with name + size. Click "Telemetry events" by
-  // accessible role + name. (Sample button is wrapped in a Button
-  // component — role=button works.)
-  await page
-    .getByRole('button', { name: /telemetry events/i })
-    .click();
+  // Sample buttons render with a stable data-testid because
+  // getByRole('button', { name: /telemetry/ }) matches BOTH the
+  // wrapping hero (role="button" for click-to-mount) and the
+  // sample button itself — the hero's accessible-name computation
+  // sucks in every descendant button's text.
+  await page.getByTestId('sample-telemetry').click();
 
   // After the sample loads, documentStore.text is non-empty AND the
   // tree pane renders the parsed structure. The top-level key from the

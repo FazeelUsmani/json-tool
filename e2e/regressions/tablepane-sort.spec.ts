@@ -13,7 +13,8 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const FIXTURE_URL = '/__e2e_fixtures__/stub-backed-table.ndjson';
+// Absolute URL — fetchUrl runs new URL(url) which throws on relative.
+const FIXTURE_URL = 'http://localhost:4173/__e2e_fixtures__/stub-backed-table.ndjson';
 const FIXTURE_PATH = fileURLToPath(
   new URL('../fixtures/stub-backed-table.ndjson', import.meta.url),
 );
@@ -21,11 +22,11 @@ const FIXTURE_PATH = fileURLToPath(
 test('TablePane sort on stub-backed NDJSON produces real order, not null-bucket', async ({
   page,
 }) => {
-  // Serve the fixture from a virtual URL local to the preview origin.
-  // The preview server doesn't have this file; the route mock supplies
-  // it. content-type must match fetchUrl.ts's allowlist (it accepts
-  // application/x-ndjson + application/jsonlines + text/plain).
-  await page.route(`**${FIXTURE_URL}`, async (route) => {
+  // Serve the fixture via a route mock on the preview origin's
+  // virtual path. content-type must match fetchUrl.ts's allowlist
+  // (it accepts application/x-ndjson + application/jsonlines +
+  // text/plain).
+  await page.route(FIXTURE_URL, async (route) => {
     const body = await readFile(FIXTURE_PATH, 'utf8');
     await route.fulfill({
       status: 200,

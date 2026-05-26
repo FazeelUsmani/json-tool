@@ -110,6 +110,10 @@ export function MonacoPane() {
       <EditorToolbar error={error} setError={setError} />
       <div
         className="relative min-h-0 flex-1"
+        // Stable e2e selector for the drop zone (used by
+        // drag-drop.spec.ts). Class-based DOM walks are brittle when
+        // Tailwind utility classes get renamed during a refactor.
+        data-testid="editor-drop-zone"
         onDragOver={(e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';

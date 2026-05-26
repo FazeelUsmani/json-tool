@@ -17,28 +17,22 @@ async function dropFile(page: import('@playwright/test').Page, opts: {
   content: string;
   mimeType: string;
 }): Promise<void> {
-  // The editor pane is the second flex child of the root layout. Use
-  // a more semantic anchor: the empty-state hero, which always sits
-  // inside the drop target on a cold load.
-  const heroExists = await page
-    .getByText('Drop a JSON file here')
-    .isVisible()
-    .catch(() => false);
-  if (!heroExists) {
-    throw new Error('drop fixture expects cold-load empty state');
-  }
+  // Wait for the empty-state hero to actually render before dispatching
+  // the drop — page.goto() resolves on `load`, which fires before
+  // React mounts + the hero appears.
+  await page.getByText('Drop a JSON file here').waitFor({
+    state: 'visible',
+    timeout: 5_000,
+  });
   await page.evaluate(
     async ({ name, content, mimeType }) => {
       const file = new File([content], name, { type: mimeType });
       const dt = new DataTransfer();
       dt.items.add(file);
-      // Find the drop target by walking up from the hero. The drop
-      // handler is registered on the parent flex container.
-      const hero = document.querySelector(
-        '[class*="border-dashed"]',
+      const target = document.querySelector(
+        '[data-testid="editor-drop-zone"]',
       ) as HTMLElement | null;
-      const target = hero?.closest('div[class*="relative"]') ?? hero;
-      if (!target) throw new Error('no drop target found');
+      if (!target) throw new Error('drop zone (data-testid) not found');
       target.dispatchEvent(
         new DragEvent('drop', { dataTransfer: dt, bubbles: true }),
       );

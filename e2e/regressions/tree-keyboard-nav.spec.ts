@@ -12,7 +12,7 @@ test('Tree keyboard nav: arrows move focus + ArrowRight expands stubs', async ({
 }) => {
   await page.goto('/');
   // Load Telemetry sample to give the tree something to navigate.
-  await page.getByRole('button', { name: /telemetry events/i }).click();
+  await page.getByTestId('sample-telemetry').click();
   await expect(
     page.getByText('"events"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
@@ -47,7 +47,7 @@ test('Tree keyboard nav: arrows move focus + ArrowRight expands stubs', async ({
 
 test('Tree keyboard nav: Escape clears search', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /telemetry events/i }).click();
+  await page.getByTestId('sample-telemetry').click();
   await expect(
     page.getByText('"events"', { exact: false }).first(),
   ).toBeVisible({ timeout: 5_000 });
