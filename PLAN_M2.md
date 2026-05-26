@@ -57,6 +57,25 @@ If any are open at M2 start, finish them before locking M2 work.
 
 ## M2 feature slices
 
+### Slice dependency graph
+
+```
+Slice B (API key UX, B1)
+  ├─ enables → Slice B (B2–B5: AI grounded explanations)
+  └─ enables → Slice C (C1: NL→jq translation)
+
+Slice C (C2: jq-wasm runtime) — independent
+
+Slice A — independent of B/C/D
+
+Slice D — D1 (waitlist) gated on persona-overlap data (see Slice D gate)
+        — D2 (in-context CTAs) depends on A + B existing (CTAs fire at
+          repair-triggered + diff-detected moments — those are A/B events)
+        — D3 (content posts) — independent
+```
+
+Order if maximizing reuse: B1 → C2 → A → B2-5 → C1 → C3 → D. Order if maximizing visible-product-value: A → B → C → D (the current Slice ordering). Either works.
+
 ### Slice A — Semantic diff + compare-to-sample (differentiator #2)
 
 **Goal:** ship the killer feature that demonstrates the paid product's seam.
@@ -86,8 +105,9 @@ If any are open at M2 start, finish them before locking M2 work.
 | B3. ExplainPane UI | Sidebar with explanations + click-to-scroll-tree integration (reuses the JSONPath QueryPane's pattern — `setFocusedIndex` + ancestor-collapsed toast). | ~1.5 days |
 | B4. Privacy framing | Prominent banner: "Your JSON goes to {OpenAI/Anthropic} when you click Explain. Toggle off to skip the AI layer." Aligns with "We never see your data" promise — we don't see the JSON, but their provider does. | ~0.5 day |
 | B5. e2e + unit specs | Mock the API in tests; verify citation parsing + click-to-scroll. | ~0.5 day |
+| **B6. Cost circuit breaker** | Per-explanation hard token-cap (default 50K input + 4K output) + per-session $ cap (default $1, user-editable) + document-size cap (>1 MB triggers automatic sample-walk truncation before any API call). Display estimated cost + actual session-spend prominently in the API key dialog. **Defaults matter — most users won't change them.** | ~1 day |
 
-**Total: ~4.5 days**
+**Total: ~5.5 days** (was ~4.5 before B6 cost breaker added)
 
 ### Slice C — NL → jq query
 
@@ -106,6 +126,10 @@ If any are open at M2 start, finish them before locking M2 work.
 
 **Goal:** capture qualified leads at moments of frustration WITHOUT breaking the free-tool UX promise.
 
+**Slice D gate (per `PROJECT_PLAN.md` risk #1, `RESEARCH_PLAN.md` Q1):**
+
+Don't ship D1 (waitlist form) OR D2 (in-context CTAs) until cold-email batch returns **≥10 responses with ≥3 showing persona overlap** (free-tool users who also work with LLM JSON). If overlap is < 30%, the paid-tier framing needs to change BEFORE the form copy lands — otherwise we collect leads on a wedge we're about to pivot. D3 (content posts) is exempt from this gate — content drives traffic regardless of paid framing.
+
 | Sub-slice | Scope | Time |
 |---|---|---|
 | D1. Waitlist with use-case capture | Form at `/waitlist`. Captures: email, company, role, primary pain (3 options), free-text use case. Persists to Postgres (backend setup) OR an Airtable / Notion API as MVP. | ~1 day |
@@ -113,6 +137,44 @@ If any are open at M2 start, finish them before locking M2 work.
 | D3. Two deep-dive content posts | (a) "Why your LLM ships 0.3% malformed JSON and nobody notices" — real failure modes seen across our customer-discovery interviews + benchmark data. (b) "Semantic drift in API payloads: the post-mortem you didn't write" — case study format. Both 2,000+ words, technical, defensible. | ~3 days writing |
 
 **Total: ~5 days** (most of D3 is writing, parallelizable with code work)
+
+---
+
+## Performance budgets per slice
+
+M1 had explicit perf targets (200 MB parse < 10s, search-keystroke INP < 200ms, etc.). M2 features without budgets are scope-creep risk:
+
+| Slice | Operation | Budget | Failure mode if missed |
+|---|---|---|---|
+| A. Semantic diff | 200 MB × 200 MB compare | < 3s on M-series MBP | Reduce to spine-only diff with stub-warn |
+| A. Diff render | 50K diff entries | < 500ms first paint | Virtualize result list with react-window |
+| B. AI explain | 1 MB JSON, 50K tokens | < 8s end-to-end | Truncate sample-walk earlier |
+| B. AI cost ceiling | Per explanation | **< $0.20 default** | Hard cap; user opt-in to higher |
+| B. AI cost ceiling | Per session | **< $1 default** | Hard cap; UI shows running spend |
+| C. NL → jq translation | 1 query | < 2s | Show cached examples while waiting |
+| C. jq-wasm cold load | First Query-tab activation | < 800ms | Preload on Query tab hover |
+| D. Waitlist submit | Submit → confirmation toast | < 500ms | Defer Postgres write to background |
+
+Measured against the same protocol as `benchmarks/methodology.md` (Apple M-series, Chrome stable, production build via `npm run preview`).
+
+---
+
+## Telemetry events to wire
+
+Custom Plausible events that drive M3 decisions. Wire these as each M2 slice lands — without them we have no signal for what's working.
+
+| Event | When fires | Why |
+|---|---|---|
+| `semantic_diff_run` | User clicks Diff with both sides loaded | Validates differentiator #2 demand |
+| `compare_baseline_saved` | User clicks "Save as baseline" | Hottest signal for paid-product seed |
+| `ai_explain_requested` | User clicks Explain | Validates differentiator #3 demand + AI-key adoption |
+| `ai_explain_cost_capped` | Cost circuit breaker fires | Tells us when defaults are too tight |
+| `nl_jq_translated` | User accepts/edits an NL→jq translation | Slice C usefulness |
+| `waitlist_signup` | Form submitted on `/waitlist` | Primary M2 conversion metric (target 200) |
+| `paid_cta_clicked` | In-context CTA click | Frustration-moment conversion rate |
+| `paid_cta_dismissed` | CTA closed without action | Annoyance signal — kill the CTA if dismiss > 10× click |
+
+Privacy framing carries forward: events contain NO JSON content, NO user identifiers, NO third-party trackers (per `PROJECT_PLAN.md` § strong privacy pitch).
 
 ---
 
@@ -125,7 +187,7 @@ Runs alongside the build, not before. Hard cadence: 1 call per day max; quality 
 | Customer conversations | 15 (10 LLM engineers + 5 integration engineers) | Cold-email batches + Discord/Slack DM + personal network |
 | Cold email batches | 50 messages, batches of 10 with iteration | YC recent batches, AI engineer Discord/Slack, indie hackers AI tag |
 | Launch posts | HN Show HN + Indie Hackers + Reddit r/LocalLLaMA, r/MachineLearning, r/LangChain | Single-day burst per `outreach/launch-narratives.md` |
-| Competitive deep-dive | Document each of: Langfuse, Helicone, Arize, Braintrust, Instructor, jsonrepair, OpenAI Structured Outputs, Anthropic strict tool use, Outlines/Guidance/llguidance | `competitive_matrix.md` (NEW file in M2) |
+| Competitive deep-dive | **Cadence:** 1 competitor / week, 90-min timebox per dive. Output appended to `competitive_matrix.md` (NEW). Order: Langfuse → Helicone → Arize → Braintrust → Instructor → jsonrepair → OpenAI Structured Outputs → Anthropic strict tool use → Outlines/Guidance/llguidance. 9 weeks total — runs past M2 into M3 prep. | Tractable; no marathon dive day |
 | Disruption risk validation | Test GPT-4o strict mode on 5 real-world schemas. Document what slips through. | Per `RESEARCH_PLAN.md` Q3 |
 
 **Decision rules** (from `RESEARCH_PLAN.md` Q1):
@@ -200,6 +262,35 @@ Explicit cuts (per `PROJECT_PLAN.md` § What we are explicitly NOT building):
 
 ---
 
+## Cut order if M2 slips
+
+When timing pressure hits, cut in this exact order. Don't cut earlier items first — they're the wedge.
+
+1. **Slice C (NL → jq)** — biggest cuttable single slice (~4.5 days). jq value alone is real but small for the free-tool target persona; NL layer is novelty. Cut to "jq query bar only, no NL translation" first, then drop entirely.
+2. **Slice D2 (in-context CTAs)** — can ship D1 (waitlist form) without D2 (frustration-moment CTAs). D2 lands as a post-launch follow-up once we know which CTAs actually convert.
+3. **Architecture cleanup track** — target was "land 2." Can drop to 0 if features need the time. Each item is genuinely deferable (e.g., parse-streaming.ts split has been deferred since M1).
+4. **D3 (deep-dive content posts)** — 2 posts → 1 post → defer to M3-launch period.
+
+**Do NOT cut:** Slice A (semantic diff — the differentiator + paid seed), Slice B core (B1-B5, the AI grounded explanations), Slice B6 cost breaker (load-bearing safety), Slice D1 (waitlist — only path to capture launch traffic as qualified leads). These are the M2 spine.
+
+---
+
+## M2 exit / M3 trigger
+
+M2 ends when EITHER:
+
+- All "Verification gates" met (gate-based exit), OR
+- **Calendar Day 28 of M2** (calendar exit), whichever comes first
+
+If calendar exit fires with gates unmet:
+1. Pause new M2 work
+2. Take 3 days to finish whichever gate is closest to met
+3. OR explicitly cut to M3
+
+**No "M2 extension."** Drift is the failure mode the cut order exists to prevent — extending M2 indefinitely is what kills startups. If we hit Day 28 with 3 of 9 gates met, M3 still starts on Day 32; the unmet gates either get re-scoped into M3 or get explicitly killed.
+
+---
+
 ## Verification gates — M2 done
 
 Per `PROJECT_PLAN.md` § Month 2 exit criteria:
@@ -253,7 +344,7 @@ M3 builds the paid SDK + dashboard. Items M2 must produce for M3 to start:
 2. **Auth provider** — Clerk vs. Auth.js. Per M1 pre-flight; decision deferred to M2 start.
 3. **Backend stack for waitlist persistence** — Bun + Postgres on Fly/Railway vs. simpler-MVP (Airtable / Notion API).
 4. **Does compare-to-sample need backend storage or stays localStorage?** Pure-localStorage is the privacy-symmetric choice but loses cross-device sync.
-5. **Open-source split** — SDK open + dashboard closed (Posthog/Langfuse model) per `PROJECT_PLAN.md`, but lock the decision before any code lands in M3.
+5. **Open-source split** — SDK open + dashboard closed (Posthog/Langfuse model) per `PROJECT_PLAN.md`. **Decide by M2 Week 3** — before any M3 architecture work starts. Decision affects: repo topology (mono vs split), license file in SDK, contributor agreement template, OSS-friendly README structure.
 
 ---
 
