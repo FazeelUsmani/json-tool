@@ -25,6 +25,7 @@ import { TreeView } from './TreeView';
 import { SchemaPane } from '@/components/schema/SchemaPane';
 import { TablePane } from '@/components/table/TablePane';
 import { QueryPane } from '@/components/query/QueryPane';
+import { DiffPane } from '@/components/diff/DiffPane';
 import {
   Tabs,
   TabsContent,
@@ -42,7 +43,7 @@ export function RightPane() {
   const sourceBlob = useViewStore((s) => s.sourceBlob);
 
   const [activeTab, setActiveTab] = useState<
-    'tree' | 'schema' | 'table' | 'query'
+    'tree' | 'schema' | 'table' | 'query' | 'diff'
   >('tree');
   const [result, setResult] = useState<SchemaTripleResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,7 +103,7 @@ export function RightPane() {
     <Tabs
       value={activeTab}
       onValueChange={(v) =>
-        setActiveTab(v as 'tree' | 'schema' | 'table' | 'query')
+        setActiveTab(v as 'tree' | 'schema' | 'table' | 'query' | 'diff')
       }
       className="flex h-full min-h-0 flex-col gap-0"
     >
@@ -139,6 +140,18 @@ export function RightPane() {
             }
           >
             Query
+          </TabsTrigger>
+          <TabsTrigger
+            value="diff"
+            className="text-xs"
+            disabled={root === null}
+            title={
+              root === null
+                ? 'Load JSON to diff against'
+                : 'Semantic diff (paste another JSON to compare)'
+            }
+          >
+            Diff
           </TabsTrigger>
         </TabsList>
       </div>
@@ -177,6 +190,19 @@ export function RightPane() {
         className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden"
       >
         <QueryPane
+          root={root}
+          onJumpToTree={() => setActiveTab('tree')}
+        />
+      </TabsContent>
+      <TabsContent
+        value="diff"
+        // forceMount for the same reason as Query — user pastes a
+        // JSON to compare, clicks a diff row, lands on Tree, comes
+        // back — should still see the paste + result list.
+        forceMount
+        className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden"
+      >
+        <DiffPane
           root={root}
           onJumpToTree={() => setActiveTab('tree')}
         />
