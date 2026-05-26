@@ -11,7 +11,7 @@ export function Component() {
         <title>Large JSON Viewer — up to 500MB in the browser | json-tool</title>
         <meta
           name="description"
-          content="Open and explore JSON files up to 500MB without crashing your browser. Streaming parser, virtualized tree, lazy expansion. 100% client-side."
+          content="Open and explore JSON files up to 500MB without crashing your browser. Streaming parser, virtualized tree, lazy expansion. We never see your data."
         />
       </Head>
       <main className="mx-auto max-w-3xl px-6 py-16">
@@ -33,7 +33,7 @@ export function Component() {
           <li>• Virtualized tree — 60fps on 200k visible nodes</li>
           <li>• Lazy expansion — open just the subtree you need</li>
           <li>• Search with progress indicator on huge files</li>
-          <li>• 100% client-side — no upload, no servers</li>
+          <li>• We never see your data — no upload, no backend</li>
         </ul>
       </main>
     </>

@@ -10,12 +10,12 @@ export function Component() {
         <title>JSON Viewer — Paste, format, inspect | json-tool</title>
         <meta
           name="description"
-          content="Free JSON viewer. Paste, drag-drop, or load from a URL. Format, minify, sort keys. Tree view with click-to-copy JSONPath. 100% client-side."
+          content="Free JSON viewer. Paste, drag-drop, or load from a URL. Format, minify, sort keys. Tree view with click-to-copy JSONPath. We never see your data."
         />
       </Head>
       <Hero
         h1="JSON Viewer"
-        lede="Paste, drag-drop, or load JSON from a URL. See it formatted as a tree with syntax highlighting and click-to-copy paths. Nothing leaves your browser."
+        lede="Paste, drag-drop, or load JSON from a URL. See it formatted as a tree with syntax highlighting and click-to-copy paths. We never see your data."
         bullets={[
           'Format, minify, sort keys',
           'Drag-drop .json / .ndjson / .jsonl files',

@@ -5,9 +5,9 @@
 // What this does:
 //
 //   1. Pins Monaco to the bundled package (not the CDN default). Required
-//      for offline use + the "100% client-side, your JSON never leaves
-//      your browser" claim — a CDN-hosted Monaco would route load through
-//      a third party.
+//      for offline use + the "we never see your data" privacy claim — a
+//      CDN-hosted Monaco would route load through a third party and
+//      undercut the no-external-dependency promise.
 //
 //   2. Routes worker requests to local module workers. Only spawns the
 //      default editor worker + the JSON language worker — never the

@@ -13,7 +13,7 @@
 //
 // Privacy framing in the description is load-bearing: the link's
 // fragment never reaches a server, matching the project's existing
-// "your JSON never leaves the browser" claim. Without that line, a
+// "we never see your data" claim. Without that line, a
 // security-conscious user might assume the link uploads somewhere.
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Copy } from 'lucide-react';

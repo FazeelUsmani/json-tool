@@ -4,7 +4,7 @@
 //
 // Why hash (not query): the fragment never reaches the server, never
 // touches edge proxies / CDN access logs, and isn't read by deferred
-// analytics scripts. Matches the "your JSON never leaves the browser"
+// analytics scripts. Matches the "we never see your data" privacy
 // claim symmetrically — the sender's bytes go straight into the
 // recipient's address bar with no intermediary.
 //

@@ -31,7 +31,7 @@ export function Component() {
           <li>• Line-paginated for files into the hundreds of MB</li>
           <li>• Expand individual records into a tree view</li>
           <li>• Search keys / values across all lines</li>
-          <li>• Same client-side guarantee — no server upload</li>
+          <li>• Same privacy guarantee — we never see your data</li>
         </ul>
       </main>
     </>

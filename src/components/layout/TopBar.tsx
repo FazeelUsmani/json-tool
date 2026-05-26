@@ -22,10 +22,12 @@ export function TopBar() {
             </Badge>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
-            Your JSON never leaves the browser — parsing, search, schema
-            inference all run client-side. We use Plausible for privacy-
-            friendly anonymous analytics (no JSON content, no user
-            identifiers, no third-party trackers). View the CSP headers.
+            We never see your data — parsing, search, schema inference,
+            repair all run in your browser. URL loads fetch directly
+            from the source you specify; we don't proxy or log
+            anything. Plausible is enabled for anonymous aggregate
+            analytics only (no JSON content, no user identifiers, no
+            third-party trackers). View the CSP headers.
           </TooltipContent>
         </Tooltip>
       </div>

@@ -108,7 +108,7 @@ export function EmptyStateHero({ onActivate }: Props) {
       </div>
       <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
         Open large JSON files (up to 500&nbsp;MB) in your browser.
-        100% client-side.
+        We never see your data.
       </p>
       <div className="flex flex-wrap items-stretch justify-center gap-2 pt-2">
         {SAMPLES.map((sample) => (

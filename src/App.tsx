@@ -23,7 +23,7 @@ function App() {
         <title>json-tool — fast JSON viewer, formatter, tree explorer</title>
         <meta
           name="description"
-          content="Free JSON tool: paste, format, minify, sort keys, tree view with click-to-copy JSONPath. Up to 500MB. 100% client-side."
+          content="Free JSON tool: paste, format, minify, sort keys, tree view with click-to-copy JSONPath. Up to 500MB. We never see your data."
         />
       </Head>
       <AppShell>

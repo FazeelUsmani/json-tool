@@ -7,8 +7,10 @@
 # json-tool
 
 > Browser-side JSON viewer + repair + schema inference for files up to
-> 500 MB. 100% client-side after first paint — no upload, no server,
-> no telemetry on the JSON itself. **(placeholder copy)**
+> 500 MB. All processing happens in your browser — we never see your
+> data. No upload, no backend, no telemetry on the JSON itself.
+> URL loads fetch directly from the source you specify; we don't
+> proxy or log anything. **(placeholder copy)**
 
 ## What this is
 

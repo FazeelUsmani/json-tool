@@ -35,7 +35,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 
 > **Show HN: A JSON viewer that opens 500MB files in your browser**
 >
-> I got tired of waiting for jq or VSCode to choke on telemetry exports. This one streams the file through a Web Worker, materializes only the top 2 levels of the tree, and lets you expand the rest on demand. Nothing leaves your browser — no uploads, no server.
+> I got tired of waiting for jq or VSCode to choke on telemetry exports. This one streams the file through a Web Worker, materializes only the top 2 levels of the tree, and lets you expand the rest on demand. We never see your data — no uploads, no backend. (URL loads fetch directly from the source you specify; nothing is proxied.)
 >
 > Benchmarks on an M-series Mac:
 > - 200MB regular JSON: 5.6s parse, top-3-levels navigable
@@ -63,7 +63,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 - 0:00–0:10 — "If you've ever opened a JSON file bigger than 100MB, you know this:" → cut to VSCode loading spinner / jq running for minutes / browser crash dialog
 - 0:10–0:25 — "Drop a 500MB file in here." → drag the fixture, the viewer shows the placeholder, the tree pane populates in real time
 - 0:25–0:45 — Demo expand on collapsed events, keyboard nav, search jumping across matches
-- 0:45–0:65 — "Three things you can verify yourself: (1) zero network requests in DevTools, (2) memory stays under 1.2GB, (3) source on GitHub."
+- 0:45–0:65 — "Three things you can verify yourself: (1) zero network requests in DevTools when you paste or drag-drop a file, (2) memory stays under 1.2GB, (3) source on GitHub."
 - 0:65–0:85 — "I built this because I was tired of [X]. If you've got a worse file, send it to me."
 - 0:85–0:90 — URL + GitHub.
 
@@ -90,7 +90,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 >
 > What "indexed" means at 500MB: you can navigate the top of the tree and expand any subtree instantly. Full-text search runs in the worker with a progress bar — you stop it when you find what you need, or let it finish.
 >
-> Source: github.com/[brand]/json-tool. Nothing leaves your browser.
+> Source: github.com/[brand]/json-tool. We never see your data — no backend, no uploads.
 >
 > Built on: @streamparser/json (Tokenizer-level, not JSONParser), Comlink, react-window. Comments welcome on the architecture write-up linked from the README.
 
