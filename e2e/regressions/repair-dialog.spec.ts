@@ -7,6 +7,7 @@
 // use it to fail the test if the race-shape error reappears.
 
 import { test, expect } from '@playwright/test';
+import { typeIntoMonaco } from '../helpers/monaco';
 
 const BROKEN_JSON = '{a: 1, b: 2,}'; // unquoted keys + trailing comma
 
@@ -27,21 +28,7 @@ test('Repair → Apply replaces text + closes dialog cleanly (no DiffEditor race
     .getByText('Drop a JSON file here')
     .waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('Drop a JSON file here').click();
-  // Wait for Monaco's .view-lines (its rendered content area) to be
-  // visible — signals the editor instance is fully mounted, not just
-  // the textarea attached. Then click the editor surface so Monaco's
-  // own mousedown handler focuses the textarea + positions the cursor.
-  // Programmatic .focus() on the off-screen textarea doesn't fire
-  // onFocus on the editor instance reliably across timing windows.
-  await page.locator('.monaco-editor .view-lines').first().waitFor({
-    state: 'visible',
-    timeout: 10_000,
-  });
-  await page.locator('.monaco-editor').first().click();
-  // insertText (CDP Input.insertText) bypasses per-key dispatch, so
-  // Monaco's auto-bracket-pair doesn't fire on the leading `{` and
-  // mangle the content. The model receives BROKEN_JSON verbatim.
-  await page.keyboard.insertText(BROKEN_JSON);
+  await typeIntoMonaco(page, BROKEN_JSON);
 
   await page.getByRole('button', { name: /repair/i }).click();
   // Dialog opens with diff editor + Apply / Cancel buttons.
@@ -68,16 +55,7 @@ test('Repair → Cancel leaves text untouched + closes cleanly', async ({
     .getByText('Drop a JSON file here')
     .waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('Drop a JSON file here').click();
-  // Same Monaco-ready + click + insertText pattern as the Apply test
-  // — programmatic textarea.focus() doesn't fire onFocus on the editor
-  // instance reliably, and keyboard.type() trips auto-bracket-pair on
-  // the leading `{`.
-  await page.locator('.monaco-editor .view-lines').first().waitFor({
-    state: 'visible',
-    timeout: 10_000,
-  });
-  await page.locator('.monaco-editor').first().click();
-  await page.keyboard.insertText(BROKEN_JSON);
+  await typeIntoMonaco(page, BROKEN_JSON);
 
   await page.getByRole('button', { name: /repair/i }).click();
   await expect(page.getByText('Repair JSON')).toBeVisible({ timeout: 5_000 });

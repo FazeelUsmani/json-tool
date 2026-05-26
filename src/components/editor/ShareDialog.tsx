@@ -15,7 +15,7 @@
 // fragment never reaches a server, matching the project's existing
 // "we never see your data" claim. Without that line, a
 // security-conscious user might assume the link uploads somewhere.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import {
   Dialog,
@@ -38,6 +38,11 @@ type Props = {
 
 export function ShareDialog({ open, text, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  // Track the active "revert Copied state" timer so we can clear it
+  // on unmount (avoids React-18 setState-after-unmount warnings if
+  // the user closes the dialog within 2s of copying) and on rapid
+  // re-clicks (avoids the previous timer racing the new one).
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Encode lazily — only when the dialog is open. Memoized on `text`
   // so reopening the dialog without changing text reuses the result.
@@ -65,14 +70,31 @@ export function ShareDialog({ open, text, onClose }: Props) {
     if (!open) setCopied(false);
   }, [open]);
 
+  // Cancel the revert timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleCopy = async () => {
     if (!result?.ok) return;
     const ok = await copyText(fullUrl);
     if (ok) {
       setCopied(true);
+      // Cancel any in-flight revert from a previous copy click so
+      // rapid double-clicks don't race their timers.
+      if (copyTimeoutRef.current !== null) {
+        clearTimeout(copyTimeoutRef.current);
+      }
       // Auto-revert after 2s so the user gets a clear "it happened"
       // pulse without sticky state if they click again.
-      setTimeout(() => setCopied(false), 2000);
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
     }
   };
 

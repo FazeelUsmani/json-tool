@@ -37,22 +37,12 @@ export function useShareHashLoad(): void {
     // decoder or a re-render can't double-fire.
     delete document.documentElement.dataset.pendingShareText;
 
-    // Re-strip the URL hash after mount. The inline script in
-    // index.html strips early (before Plausible reads location.href
-    // — privacy guarantee), but vite-react-ssg's router can re-derive
-    // and re-apply the original URL during hydration, restoring the
-    // `#json=…` fragment. Stripping again here keeps the address bar
-    // clean after mount completes.
-    if (
-      typeof window !== 'undefined' &&
-      window.location.hash.indexOf('#json=') === 0
-    ) {
-      window.history.replaceState(
-        {},
-        '',
-        window.location.pathname + window.location.search,
-      );
-    }
+    // (Removed 2026-05-26: a post-mount re-strip of `window.location.hash`
+    // was here as belt-and-suspenders against a hypothetical
+    // vite-react-ssg hydration that re-introduces the hash. The
+    // share-link.spec.ts round-trip + sub-route specs both pass without
+    // it — the inline strip in index.html handles every case we test.
+    // Re-add this block only if a regression surfaces.)
 
     // Decoder accepts the raw payload (without `#json=` prefix) or
     // the full hash — pass the raw form since that's what index.html

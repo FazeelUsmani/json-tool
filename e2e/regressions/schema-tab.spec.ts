@@ -6,6 +6,7 @@
 // staleness dot on the Refresh button.
 
 import { test, expect } from '@playwright/test';
+import { typeIntoMonaco } from '../helpers/monaco';
 
 test('Schema tab: first click triggers inference + renders output', async ({
   page,
@@ -51,20 +52,7 @@ test('Schema tab: edit text → staleness dot appears on Refresh', async ({
   // to invalidate. (Tree pane is the default; tab change triggers
   // re-render but doesn't unmount Monaco.)
   await page.getByRole('tab', { name: /tree/i }).click();
-  // Click Monaco's editor surface to focus its textarea via the
-  // editor's own mousedown handler — programmatic .focus() on the
-  // off-screen textarea doesn't fire onFocus listeners on the editor
-  // instance reliably. Wait for .view-lines first so the editor is
-  // fully mounted before we click.
-  await page.locator('.monaco-editor .view-lines').first().waitFor({
-    state: 'visible',
-    timeout: 10_000,
-  });
-  await page.locator('.monaco-editor').first().click();
-  // insertText goes through CDP's Input.insertText — bypasses Monaco's
-  // auto-bracket-pair (irrelevant for a space, but consistent with the
-  // repair-dialog typing pattern).
-  await page.keyboard.insertText(' ');
+  await typeIntoMonaco(page, ' ');
 
   // Schema tab's Refresh button should now show stale-dot.
   // The button's title attribute changes to "Tree has changed since
