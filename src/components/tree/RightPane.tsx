@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TreeView } from './TreeView';
 import { SchemaPane } from '@/components/schema/SchemaPane';
 import { TablePane } from '@/components/table/TablePane';
+import { QueryPane } from '@/components/query/QueryPane';
 import {
   Tabs,
   TabsContent,
@@ -40,9 +41,9 @@ export function RightPane() {
   const root = useViewStore((s) => s.root);
   const sourceBlob = useViewStore((s) => s.sourceBlob);
 
-  const [activeTab, setActiveTab] = useState<'tree' | 'schema' | 'table'>(
-    'tree',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'tree' | 'schema' | 'table' | 'query'
+  >('tree');
   const [result, setResult] = useState<SchemaTripleResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +102,7 @@ export function RightPane() {
     <Tabs
       value={activeTab}
       onValueChange={(v) =>
-        setActiveTab(v as 'tree' | 'schema' | 'table')
+        setActiveTab(v as 'tree' | 'schema' | 'table' | 'query')
       }
       className="flex h-full min-h-0 flex-col gap-0"
     >
@@ -129,6 +130,16 @@ export function RightPane() {
           >
             Table
           </TabsTrigger>
+          <TabsTrigger
+            value="query"
+            className="text-xs"
+            disabled={root === null}
+            title={
+              root === null ? 'Load JSON to query' : 'JSONPath query bar'
+            }
+          >
+            Query
+          </TabsTrigger>
         </TabsList>
       </div>
       <TabsContent
@@ -151,6 +162,18 @@ export function RightPane() {
           onRefresh={() => {
             void runInfer();
           }}
+        />
+      </TabsContent>
+      <TabsContent
+        value="query"
+        // Query is mount-on-demand like Table — jsonpath-plus runs
+        // on every debounced keystroke and the result list can be
+        // long, so don't pay the cost when the tab is inactive.
+        className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden"
+      >
+        <QueryPane
+          root={root}
+          onJumpToTree={() => setActiveTab('tree')}
         />
       </TabsContent>
       <TabsContent
