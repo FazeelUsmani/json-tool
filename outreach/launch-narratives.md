@@ -25,7 +25,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 
 ## A-narrative — "500MB hits"
 
-**Headline:** "Open a 500MB JSON file in your browser. 30 seconds. No server. No upload."
+**Headline:** "Open a 500MB JSON file in your browser. 14 seconds. No server. No upload."
 
 **Sub:** "Built for engineers staring at telemetry exports, LLM training corpora, and database dumps that crash every other viewer."
 
@@ -39,7 +39,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 >
 > Benchmarks on an M-series Mac:
 > - 200MB regular JSON: 5.6s parse, top-3-levels navigable
-> - 500MB regular JSON: <30s parse, indexed search
+> - 500MB regular JSON: 13.9s parse @ 36.4 MB/s, indexed search
 > - 200MB NDJSON: detection auto-switches to line-paginated mode
 >
 > Built with @streamparser/json's Tokenizer (because JSONParser allocates the full tree in worker RAM), Comlink for the worker boundary, react-window for virtualized rendering. Source: github.com/[brand]/json-tool (link).
@@ -54,7 +54,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 
 ### OG / preview card
 
-- **Image:** dark-mode screenshot of the 200MB telemetry tree open, with the heap-size graph below showing it stayed under 600MB
+- **Image:** dark-mode screenshot of the 200MB telemetry tree open, with the heap-size graph below showing it stayed under 1.2GB steady (matches methodology table — regular JSON expansion is 3.35× source size; for the "under 600MB" framing use a 200MB NDJSON fixture instead, which settles at 262MB)
 - **Title:** "500MB JSON in your browser — no server, no upload"
 - **Description:** "Streaming parser, virtualized tree, in-place expansion. Built for files that crash other viewers."
 
@@ -63,7 +63,7 @@ Current state (updated 2026-05-22 W4-Mon, post-INP fix):
 - 0:00–0:10 — "If you've ever opened a JSON file bigger than 100MB, you know this:" → cut to VSCode loading spinner / jq running for minutes / browser crash dialog
 - 0:10–0:25 — "Drop a 500MB file in here." → drag the fixture, the viewer shows the placeholder, the tree pane populates in real time
 - 0:25–0:45 — Demo expand on collapsed events, keyboard nav, search jumping across matches
-- 0:45–0:65 — "Three things you can verify yourself: (1) zero network requests in DevTools when you paste or drag-drop a file, (2) memory stays under 1.2GB, (3) source on GitHub."
+- 0:45–0:65 — "Three things you can verify yourself: (1) zero network requests in DevTools when you paste or drag-drop a file, (2) memory stays under 1.2GB at 200MB (1.7GB peak at the 500MB ceiling), (3) source on GitHub."
 - 0:65–0:85 — "I built this because I was tired of [X]. If you've got a worse file, send it to me."
 - 0:85–0:90 — URL + GitHub.
 
