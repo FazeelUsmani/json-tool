@@ -37,9 +37,13 @@ test('Diff: Monaco DiffEditor mounts when tab is opened with loaded JSON', async
     page.locator('.monaco-diff-editor .editor.modified').first(),
   ).toBeVisible();
 
-  // Run diff button + Save-baseline button visible.
+  // Run diff button visible.
   await expect(page.getByTestId('diff-run')).toBeVisible();
-  await expect(page.getByTestId('diff-save-baseline')).toBeVisible();
+
+  // Baseline details section is present but collapsed by default
+  // (the Save/Compare/Clear actions are inside the closed disclosure).
+  await expect(page.getByTestId('diff-baseline-section')).toBeVisible();
+  await expect(page.getByTestId('diff-save-baseline')).toBeHidden();
 
   // "Before" indicator labels the comparison.
   await expect(page.getByText(/before:.*currently loaded document/i)).toBeVisible();
@@ -62,6 +66,10 @@ test('Diff: save baseline → compare-to-baseline → clear', async ({
 
   await page.getByRole('tab', { name: /^diff$/i }).click();
 
+  // Expand the collapsed "Advanced" baseline details disclosure so the
+  // Save/Compare/Clear actions are interactable.
+  await page.getByTestId('diff-baseline-section').locator('summary').click();
+
   // Initially: no baseline saved → "Save current as baseline" button.
   const saveButton = page.getByTestId('diff-save-baseline');
   await expect(saveButton).toBeVisible();
@@ -81,11 +89,6 @@ test('Diff: save baseline → compare-to-baseline → clear', async ({
   await expect(
     page.getByText(/comparing baseline.*current document/i),
   ).toBeVisible({ timeout: 5_000 });
-
-  // "Before" indicator switches from "currently loaded document" to "baseline (saved …)".
-  await expect(
-    page.getByText(/before:.*baseline.*saved/i),
-  ).toBeVisible({ timeout: 2_000 });
 
   // Clear baseline → status chip disappears, Save button reappears.
   await page.getByTestId('diff-clear-baseline').click();

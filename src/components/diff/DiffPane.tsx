@@ -68,6 +68,11 @@ export function DiffPane({ root }: Props) {
   const [mode, setMode] = useState<Mode>('paste');
   const [baseline, setBaseline] = useState<Baseline | null>(null);
   const [diffState, setDiffState] = useState<DiffState>({ kind: 'idle' });
+  // Controlled `<details>` open state — React re-renders can otherwise
+  // lose the DOM open attribute when the inner branch (no-baseline vs
+  // saved-baseline) switches identity. Default closed (collapsed UX);
+  // open automatically when the user takes a baseline action.
+  const [baselineOpen, setBaselineOpen] = useState(false);
 
   // Lazy-init avoided here for the same SSR-shim reason DiffPane v1
   // documented: vite-react-ssg's localStorage shim is an object
@@ -166,12 +171,16 @@ export function DiffPane({ root }: Props) {
       return;
     }
     setBaseline(loadBaseline());
+    setBaselineOpen(true);
     toast.success('Baseline saved.');
   };
 
   const handleClearBaseline = () => {
     clearBaseline();
     setBaseline(null);
+    // Leave the details open so a user who just cleared can immediately
+    // see the "Save current as baseline" affordance without having to
+    // re-expand.
     // If we're displaying a baseline-mode diff, fall back to paste mode.
     if (mode === 'baseline') {
       setMode('paste');
@@ -187,12 +196,14 @@ export function DiffPane({ root }: Props) {
       toast.error('Saved baseline is corrupted — cleared.');
       clearBaseline();
       setBaseline(null);
+      setBaselineOpen(false);
       return;
     }
     // Baseline flow: baseline = BEFORE (known-good reference),
     // current = AFTER ("what I'm checking"). Pointer paths in the
     // result point into the current tree.
     setMode('baseline');
+    setBaselineOpen(true);
     const result = diffTrees(parsed.root, root);
     setDiffState({ kind: 'success', ops: result.ops, source: 'baseline' });
   };
@@ -226,34 +237,41 @@ export function DiffPane({ root }: Props) {
           )}
         </div>
 
-        {/* Baseline persistence section */}
-        <div
-          className="rounded-md border border-dashed px-2 py-1.5"
+        {/* Baseline persistence section — collapsed by default so the
+            default DiffPane UX is just "paste + diff". Power users
+            expand to save / compare against a working sample (the M2
+            differentiator from PLAN_M2.md Slice A3). */}
+        <details
+          className="rounded-md border border-dashed"
           data-testid="diff-baseline-section"
+          open={baselineOpen}
+          onToggle={(e) => setBaselineOpen(e.currentTarget.open)}
         >
-          {baseline === null ? (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground text-xs">
-                No baseline saved.
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSaveBaseline}
-                disabled={empty}
-                data-testid="diff-save-baseline"
-              >
-                Save current as baseline
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-muted-foreground text-xs">
-                <strong className="font-medium">Baseline saved</strong>{' '}
-                {formatRelativeTime(baseline.savedAt)} (
-                {formatBytes(baseline.bytes)})
-              </span>
-              <div className="flex gap-1.5">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer list-none px-2 py-1.5 text-xs select-none [&::-webkit-details-marker]:hidden">
+            <span className="mr-1">{baselineOpen ? '▾' : '▸'}</span>
+            {baseline === null
+              ? 'Advanced: save current as a baseline'
+              : `Baseline saved ${formatRelativeTime(baseline.savedAt)} (${formatBytes(baseline.bytes)})`}
+          </summary>
+          <div className="border-border/40 border-t px-2 py-1.5">
+            {baseline === null ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground text-xs">
+                  Save the current document as a reference. Future loads can
+                  be auto-diffed against it.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveBaseline}
+                  disabled={empty}
+                  data-testid="diff-save-baseline"
+                >
+                  Save current as baseline
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
                 <Button
                   size="sm"
                   onClick={handleCompareToBaseline}
@@ -279,9 +297,9 @@ export function DiffPane({ root }: Props) {
                   Clear
                 </Button>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </details>
 
         {/* Run diff + summary chips */}
         <div className="flex flex-wrap items-center gap-2">
