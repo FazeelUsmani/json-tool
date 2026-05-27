@@ -1,12 +1,24 @@
 # Rust/WASM Migration Plan
 
-> **Status: Phase 0 complete; Phase 1 paused for brand session
-> (2026-05-27).** User overrode the earlier post-launch deferral and
-> ran Phase 0 baseline capture on 2026-05-26. Pre-Phase-0 Decisions
-> were resolved on 2026-05-27 (see below — all 5 resolved + 1 new
-> skill-ramp decision added). Phase 1 (Rust/WASM skeleton) is then
-> paused pending the brand session, which remains the load-bearing
-> launch unblock.
+> **STATUS: PARKED — superseded (2026-05-27 evening).** User pivoted
+> to the full-rewrite path; engine-only migration is no longer the
+> active scope. See `RUST_REWRITE_PLAN.md` (active) and
+> `PLAN_UNIFIED.md` (master roadmap).
+>
+> This plan stays as a real fallback if rewrite-cost becomes blocking.
+> Phase 0 baseline below remains valid as historical record of the
+> TS implementation's perf characteristics — useful as parity floor
+> for measuring the Rust app's perf gains against the existing app.
+>
+> ---
+>
+> **Prior status (2026-05-27 afternoon, now historical):** Phase 0
+> complete; Phase 1 paused for brand session. User overrode the
+> earlier post-launch deferral and ran Phase 0 baseline capture on
+> 2026-05-26. Pre-Phase-0 Decisions were resolved on 2026-05-27
+> (see below — all 5 resolved + 1 new skill-ramp decision added).
+> Phase 1 (Rust/WASM skeleton) was paused pending the brand session,
+> which remains the load-bearing launch unblock.
 >
 > Phase 0 baseline captured in `benchmarks/methodology.md`
 > § "Rust migration baseline — 2026-05-26 (Phase 0)" — gates green,
@@ -109,6 +121,17 @@ Resolved before adding any Rust files (resolutions captured 2026-05-27):
   parser correctness bugs. Total migration estimate adjusts: ~6-8
   weeks elapsed vs. plan's ~3-6 (the original number didn't budget
   ramp time). Resolution date: 2026-05-27.
+- **Rust core repo location: ✅ IN-REPO, EXTRACTABLE.** `crates/json_engine`
+  lives in this repo (Approach C — start in `json-tool`, design for
+  future extraction). Engine boundary stays clean: no
+  `json-tool`-specific assumptions in the Rust lib, JSON-serializable
+  IR across the WASM boundary, narrow public API (`parseFile`,
+  `expandStub`, `searchStubs`). Future extraction to a standalone
+  `json-engine-rs` crate (for M3 paid-product backend reuse, future
+  CLI, etc.) is mechanical — `git filter-branch` + `npm publish` —
+  not a redesign. Cost of writing for extractability is ~zero given
+  the boundary is already designed clean in the plan. Resolution
+  date: 2026-05-27.
 
 ## JS Cleanup Checkpoint
 
