@@ -1,14 +1,21 @@
 # Rust/WASM Migration Plan
 
-> **STATUS: PARKED — superseded (2026-05-27 evening).** User pivoted
-> to the full-rewrite path; engine-only migration is no longer the
-> active scope. See `RUST_REWRITE_PLAN.md` (active) and
-> `PLAN_UNIFIED.md` (master roadmap).
+> **STATUS: ACTIVE — LOCKED (2026-05-27 late evening).** User locked
+> engine-only as the final Rust strategy after 5 flips in one day.
+> See `RUST_REWRITE_PLAN.md` (parked) for the full-rewrite design
+> reference and `PLAN_UNIFIED.md` (master roadmap) for the calendar.
 >
-> This plan stays as a real fallback if rewrite-cost becomes blocking.
-> Phase 0 baseline below remains valid as historical record of the
-> TS implementation's perf characteristics — useful as parity floor
-> for measuring the Rust app's perf gains against the existing app.
+> **Repo structure under this plan (LOCKED 2026-05-27):**
+> - `json-tool-app` (renamed from json-tool earlier today) — React/TS
+>   app that keeps shipping. Consumes the Rust engine via WASM.
+> - `json-tool` (this repo, new) — pure Rust engine crate
+>   (`crates/json_engine`). Compiles to WASM via wasm-pack; the
+>   generated artifact gets committed into json-tool-app per the
+>   deploy-artifact pre-flight decision (see § Pre-Phase-0 Decisions).
+>
+> Phase 0 baseline (TS app perf characteristics) captured at
+> `benchmarks/methodology.md` § "Rust migration baseline — 2026-05-26"
+> remains the parity floor the engine must match or beat.
 >
 > ---
 >

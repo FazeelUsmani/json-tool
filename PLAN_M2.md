@@ -16,12 +16,12 @@ Last updated: **2026-05-26** (created same day JSONPath landed in M1).
 
 ## Strategic context — the three core differentiators
 
-Per `PROJECT_PLAN.md` § "Three core differentiators", these are the **only three things we will be world-class at in the free tool**. Every other M2 feature is either polish or a paid-product teaser. M1 shipped #1 + half of #3. M2's job: ship #2 + the rest of #3.
+Per `PROJECT_PLAN.md` § "Three core differentiators", these are the **only three things we will be world-class at in the free tool**. Every other M2 feature is either polish or a paid-product teaser. M1 shipped #1, Slice A shipped #2, and M1 shipped half of #3. M2's remaining job: ship the rest of #3 plus query/waitlist follow-through.
 
 | # | Differentiator | M1 status | M2 status |
 |---|---|---|---|
 | 1 | **Huge-JSON handling** (500MB ceiling, streaming parse, virtualized tree, NDJSON, viewer-only mode) | ✅ shipped | — (M2 polish only) |
-| 2 | **Semantic diff + "compare against working sample"** — detects renames, type changes, enum shifts, structural drift. NOT textual diff. Killer feature for paid lead-gen. | not started | **M2 priority** |
+| 2 | **Semantic diff + "compare against working sample"** — detects renames, type changes, enum shifts, structural drift. NOT textual diff. Killer feature for paid lead-gen. | ✅ shipped (Slice A1+A2+A3+A4) | M2 polish only |
 | 3 | **AI grounded explanations + schema inference** — paste JSON → schema (✅ M1) + AI-cited path-by-path explanations of what fields mean and what looks suspicious. No free-form chat. | schema ✅; AI layer not started | **M2 priority** |
 
 Why these three (from `RESEARCH_PLAN.md` synthesis):

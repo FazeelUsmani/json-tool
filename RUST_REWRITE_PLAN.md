@@ -1,22 +1,23 @@
 # Rust Rewrite Plan — json-tool from scratch
 
-> **Status: ACTIVE (re-unparked 2026-05-27 evening).** User confirmed
-> full-rewrite path after considering the engine-only alternative.
-> Decision history this day: authored active → parked (pivot to
-> engine-only) → re-unparked (pivot back to rewrite). The flip-flop
-> is preserved here so future-self understands the decision wasn't
-> linear and may need revisiting if rewrite-cost becomes blocking.
+> **Status: PARKED — LOCKED (2026-05-27 late evening).** User pivoted
+> back to engine-only Rust (see `RUST_MIGRATION_PLAN.md`) after
+> reviewing the Phase 0 Leptos scaffold and questioning the rewrite
+> scope. Decision history this day: rewrite → engine-only → rewrite
+> (Phase 0 scaffolded) → **engine-only LOCKED**. The "is this really
+> what I want?" pattern surfaced 5 times in one day; this final lock
+> is the answer.
 >
-> **New repo structure (decided 2026-05-27 evening):**
-> - Current repo `json-tool` → renames to `json-tool-app`. Becomes
->   the React/TS reference implementation; not shipped publicly under
->   the rewrite path.
-> - NEW repo `json-tool` → the Rust app (Leptos/Yew + WASM, fresh
->   start). M1 + M2 features get rebuilt here during the phases
->   below.
+> The Leptos UI scaffolding from the brief Phase 0 attempt has been
+> deleted (`crates/json_tool_ui/` removed, `dist/` removed). Only
+> `crates/json_engine/` remains, reconfigured as a WASM-consumable
+> library per the migration plan.
 >
-> See `PLAN_UNIFIED.md` for the brand-session-first calendar that
-> interleaves this rewrite with launch + customer-discovery work.
+> This file stays as design reference for the full-rewrite path.
+> Useful artifacts retained: stack research, editor-replacement
+> risk analysis, honest cost framing. If you find yourself reading
+> this as a guide-to-action, STOP and re-read `RUST_MIGRATION_PLAN.md`
+> (active) + `PLAN_UNIFIED.md` (master roadmap, engine-only).
 >
 > **Honest acknowledgment of cost** (recorded verbatim so future-self
 > doesn't relitigate the decision in week 8):
