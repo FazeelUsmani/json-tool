@@ -306,11 +306,29 @@ export function DiffPane({ root }: Props) {
           <Button
             size="sm"
             onClick={handleRunDiff}
-            disabled={empty}
+            disabled={empty || mode === 'baseline'}
             data-testid="diff-run"
+            title={
+              mode === 'baseline'
+                ? 'Exit baseline view first to paste a new comparison'
+                : undefined
+            }
           >
             Run diff
           </Button>
+          {mode === 'baseline' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setMode('paste');
+                setDiffState({ kind: 'idle' });
+              }}
+              data-testid="diff-exit-baseline"
+            >
+              ← Exit baseline view
+            </Button>
+          )}
           {summary !== null && diffState.kind === 'success' && (
             <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
               {summary.added > 0 && (
