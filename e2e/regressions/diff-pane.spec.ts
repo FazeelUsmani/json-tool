@@ -30,9 +30,11 @@ test('Diff: Monaco DiffEditor mounts when tab is opened with loaded JSON', async
     page.locator('.monaco-diff-editor .editor.modified').first(),
   ).toBeVisible();
 
-  // Pane headers label which side accepts input.
+  // Pane headers label which side accepts input. Multiple matches
+  // for "paste your json here" exist (header label + overlay),
+  // so use .first() to disambiguate.
   await expect(page.getByText(/original/i).first()).toBeVisible();
-  await expect(page.getByText(/paste your json here/i)).toBeVisible();
+  await expect(page.getByText(/paste your json here/i).first()).toBeVisible();
 });
 
 test('Diff: tab disabled until JSON is loaded', async ({ page }) => {
