@@ -208,7 +208,7 @@ All deferred from M1 audit per `launch-readiness-gate.md` § Architecture cleanu
 | `parse-streaming.ts` split | ~half-day | 588 LOC; extract tokenizer-pump + stub-emit logic |
 | TablePane decomposition | ~half-day | 524 LOC; extract column-derivation + sort coordinator |
 | viewStore split (`viewState` + `parserSession`) | ~1 hr | Explicit "tipping point" note in the file |
-| Schema worker root-clone elimination | ~2 hrs | Route inference through parser worker (already holds the tree); eliminates ~225 MB structured-clone on every Refresh |
+| ~~Schema worker root-clone elimination~~ ✅ **SHIPPED** | — | Routes inference through parser worker (`parserHost.inferCurrentSchema`); eliminates ~225 MB structured-clone on every Refresh. `schema.worker.ts` deleted; see `schemaHost.ts` for the new path. Verified clean: tsc + lint + 436 unit tests passing. |
 | Identity consistency pass | ~1–2 hrs | 2 dormant sites with legacy `path`-keying (parse-streaming arrayLengths, ByteIndexEntry) |
 | Stub-expand e2e + tree-row testids | ~1 hr | Markup tweak on TreeNode + a new e2e spec; closes the §Action #2 sub-gap |
 | Worker integration tests | ~half-day | Parser worker + schema worker boundary tests |

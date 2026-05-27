@@ -14,15 +14,18 @@
 
 import * as Comlink from 'comlink';
 import type { ParserWorkerAPI } from '@/lib/parser/parser.worker';
+import type { ParseNdjsonResult } from '@/lib/parser/parse-ndjson';
 import type {
   ParseProgress,
   ParseResult,
 } from '@/lib/parser/parser-types';
+import type { SchemaTripleResult } from '@/lib/schema/result';
 import { isDebugEnabled } from '@/components/debug/useDebugFlag';
 import { recordParseStats, setParseInFlight } from './parseStats';
 
 let workerInstance: Worker | null = null;
 let api: Comlink.Remote<ParserWorkerAPI> | null = null;
+let workerGeneration = 0;
 
 // Monotonic id incremented at the start of every parseFile. When a call
 // finishes (success or failure) and its id no longer matches, a later
@@ -53,6 +56,7 @@ function terminateWorker() {
   }
   workerInstance = null;
   api = null;
+  workerGeneration++;
 }
 
 export async function parseFile(
@@ -127,6 +131,41 @@ export async function expandStub(
   return ensureWorker().expandStub(file, byteStart, byteEnd, basePath, baseId);
 }
 
+export async function parseNdjson(file: Blob): Promise<ParseNdjsonResult> {
+  const myId = ++activeParseFileId;
+  terminateWorker();
+  const remote = ensureWorker();
+  const t0 = performance.now();
+  setParseInFlight(true);
+  try {
+    const result = await remote.parseNdjsonFile(file);
+    if (myId !== activeParseFileId) {
+      throw makeAbortError('parseNdjson superseded');
+    }
+    const ms = Math.round(performance.now() - t0);
+    const mbPerSec = file.size / 1024 / 1024 / (ms / 1000);
+    if (isDebugEnabled()) {
+      console.log(
+        `[parser] parseNdjson ${(file.size / 1024 / 1024).toFixed(1)}MB → ${ms}ms (${mbPerSec.toFixed(1)} MB/s)`,
+      );
+    }
+    recordParseStats({
+      ms,
+      bytes: file.size,
+      mbPerSec,
+      completedAt: performance.now(),
+    });
+    return result;
+  } catch (err) {
+    if (myId !== activeParseFileId) {
+      throw makeAbortError('parseNdjson superseded');
+    }
+    throw err;
+  } finally {
+    if (myId === activeParseFileId) setParseInFlight(false);
+  }
+}
+
 export function abort(): void {
   // Fire-and-forget — the worker's abort sets a flag the parse loop polls.
   // No await: if the worker is busy mid-tokenize, we don't want to block
@@ -157,6 +196,23 @@ export async function searchStubs(
 
 export function abortSearch(): void {
   void api?.abortSearch();
+}
+
+export async function inferCurrentSchema(): Promise<SchemaTripleResult> {
+  const remote = ensureWorker();
+  const generation = workerGeneration;
+  try {
+    return await remote.inferAndEmitCurrentSchema();
+  } catch (err) {
+    if (generation !== workerGeneration) {
+      throw makeAbortError('inferSchema superseded');
+    }
+    throw err;
+  }
+}
+
+export function clearSession(): void {
+  void api?.clearSession();
 }
 
 // beforeunload cleanup: terminate so File handles release promptly. Cheap

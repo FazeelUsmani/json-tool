@@ -1,7 +1,6 @@
 // Walker that builds the schema IR (see `./types.ts`) from a TreeNode
 // root. Pure function of (root, fetchStub) — no Blob, no parser, no
-// worker concerns; those land in `schema.worker.ts` and `schemaHost.ts`
-// in subsequent slices.
+// worker concerns; the parser worker owns those at integration time.
 //
 // `fetchStub` is the injected dependency for resolving the raw JS
 // value behind a stub-object / stub-array / ndjson-line node. In

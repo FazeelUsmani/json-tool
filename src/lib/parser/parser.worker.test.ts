@@ -118,3 +118,40 @@ describe('parser.worker — searchStubs', () => {
     expect(lastScanned).toBeLessThan(rs.length);
   });
 });
+
+describe('parser.worker — session schema inference', () => {
+  test('infers schema from the cached JSON parse without a schema worker clone', async () => {
+    await api.parseFile(
+      makeBlob('{"events":[{"id":1,"name":"a"},{"id":2}]}'),
+      () => {},
+    );
+
+    const result = await api.inferAndEmitCurrentSchema();
+
+    const rootProperties = result.jsonSchema.schema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const events = rootProperties.events as {
+      items: { properties: Record<string, unknown>; required: string[] };
+    };
+    expect(events.items.properties.id).toEqual({ type: 'number' });
+    expect(events.items.properties.name).toEqual({ type: 'string' });
+    expect(events.items.required).toEqual(['id']);
+  });
+
+  test('infers schema from the cached NDJSON parse', async () => {
+    await api.parseNdjsonFile(makeBlob('{"id":1}\n{"id":2,"ok":true}\n'));
+
+    const result = await api.inferAndEmitCurrentSchema();
+
+    const rootSchema = result.jsonSchema.schema as {
+      type: string;
+      items: { properties: Record<string, unknown>; required: string[] };
+    };
+    expect(rootSchema.type).toBe('array');
+    expect(rootSchema.items.properties.id).toEqual({ type: 'number' });
+    expect(rootSchema.items.properties.ok).toEqual({ type: 'boolean' });
+    expect(rootSchema.items.required).toEqual(['id']);
+  });
+});

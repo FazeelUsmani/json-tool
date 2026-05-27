@@ -33,9 +33,9 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { useViewStore } from '@/state/viewStore';
-import { inferSchemaForRoot } from '@/state/schemaHost';
+import { inferSchemaForCurrentDocument } from '@/state/schemaHost';
 import { findPrimaryArray } from '@/lib/table/primaryArray';
-import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
+import type { SchemaTripleResult } from '@/lib/schema/result';
 import type { TreeNode } from '@/lib/tree/parse';
 
 export function RightPane() {
@@ -72,7 +72,7 @@ export function RightPane() {
     setLoading(true);
     setError(null);
     try {
-      const next = await inferSchemaForRoot(root, sourceBlob);
+      const next = await inferSchemaForCurrentDocument();
       setResult(next);
       setRootAtInfer(root);
     } catch (err) {

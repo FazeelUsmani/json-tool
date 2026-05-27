@@ -5,7 +5,15 @@
 
 import * as Comlink from 'comlink';
 import { parseStreaming } from './parse-streaming';
+import { parseNdjson, type ParseNdjsonResult } from './parse-ndjson';
 import type { ParseProgress, ParseResult } from './parser-types';
+import { inferSchema, type FetchStubValue } from '@/lib/schema/infer';
+import { emitJsonSchema } from '@/lib/schema/emit-json-schema';
+import { emitTypeScript } from '@/lib/schema/emit-typescript';
+import { emitZod } from '@/lib/schema/emit-zod';
+import type { SchemaTripleResult } from '@/lib/schema/result';
+import type { TreeNode } from '@/lib/tree/parse';
+import { spliceSubtree } from '@/lib/tree/splice';
 
 // Shared abort flag. parseStreaming polls signal.aborted between chunks;
 // flipping it from the main thread via api.abort() lets a long parse exit
@@ -17,6 +25,17 @@ let abortFlag: { aborted: boolean } = { aborted: false };
 // (user typed a new query) without affecting any in-flight parseFile /
 // expandStub. Recreated per searchStubs call.
 let searchAbortFlag: { aborted: boolean } = { aborted: false };
+
+// Session-owned parse state. Keeping the latest root in this worker lets
+// schema inference run here instead of structured-cloning the full tree
+// into a second schema worker on every Refresh click.
+let currentRoot: TreeNode | null = null;
+let currentSourceBlob: Blob | null = null;
+
+function rememberParsedDocument(root: TreeNode | null, sourceBlob: Blob): void {
+  currentRoot = root;
+  currentSourceBlob = sourceBlob;
+}
 
 // Exported so vitest can exercise the worker boundary methods
 // (searchStubs batching, abort wiring) without spinning up a real
@@ -32,11 +51,20 @@ export const api = {
     onProgress: (p: ParseProgress) => void,
   ): Promise<ParseResult> {
     abortFlag = { aborted: false };
-    return parseStreaming(file.stream(), {
+    const result = await parseStreaming(file.stream(), {
       onProgress,
       signal: abortFlag,
       totalBytes: file.size,
     });
+    rememberParsedDocument(result.root, file);
+    return result;
+  },
+
+  async parseNdjsonFile(file: Blob): Promise<ParseNdjsonResult> {
+    abortFlag = { aborted: false };
+    const result = await parseNdjson(file);
+    rememberParsedDocument(result.root, file);
+    return result;
   },
 
   // Re-parse a byte slice of `file` as if it were rooted at `basePath`
@@ -53,13 +81,17 @@ export const api = {
   ): Promise<ParseResult> {
     abortFlag = { aborted: false };
     const slice = file.slice(byteStart, byteEnd);
-    return parseStreaming(slice.stream(), {
+    const result = await parseStreaming(slice.stream(), {
       signal: abortFlag,
       totalBytes: slice.size,
       basePath,
       baseId,
       byteOffsetBase: byteStart,
     });
+    if (currentRoot !== null && result.root !== null) {
+      currentRoot = spliceSubtree(currentRoot, baseId, result.root);
+    }
+    return result;
   },
 
   abort(): void {
@@ -164,6 +196,28 @@ export const api = {
 
   abortSearch(): void {
     searchAbortFlag.aborted = true;
+  },
+
+  async inferAndEmitCurrentSchema(): Promise<SchemaTripleResult> {
+    if (currentRoot === null || currentSourceBlob === null) {
+      throw new Error('No parsed document available for schema inference');
+    }
+    const sourceBlob = currentSourceBlob;
+    const fetchStub: FetchStubValue = async (byteStart, byteEnd) => {
+      const text = await sourceBlob.slice(byteStart, byteEnd).text();
+      return JSON.parse(text);
+    };
+    const ir = await inferSchema(currentRoot, fetchStub);
+    return {
+      jsonSchema: emitJsonSchema(ir),
+      typescript: emitTypeScript(ir),
+      zod: emitZod(ir),
+    };
+  },
+
+  clearSession(): void {
+    currentRoot = null;
+    currentSourceBlob = null;
   },
 };
 

@@ -24,7 +24,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { copyText } from '@/lib/clipboard';
-import type { SchemaTripleResult } from '@/lib/parser/schema.worker';
+import type { SchemaTripleResult } from '@/lib/schema/result';
 
 type Props = {
   result: SchemaTripleResult | null;

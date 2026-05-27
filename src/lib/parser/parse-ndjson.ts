@@ -3,10 +3,9 @@
 // that builds the line-offset index and emits a virtual TreeNode tree
 // (an array root whose children are ndjson-line leaves).
 //
-// Runs main-thread for v1 — see PLAN.MD W3-Thu. The full byte buffer
-// has to materialize once to walk newlines; for 200MB that's a ~200ms
-// allocation + ~100ms scan in V8. Acceptable for a one-shot per file;
-// move into the worker if the smoke shows main-thread blocking.
+// Called from the parser worker in production. The full byte buffer has
+// to materialize once to walk newlines; keeping that allocation and scan
+// off the main thread preserves the huge-file UX.
 //
 // The TreeNode tree we produce is intentionally lossless about line
 // positions but lossy about line content — line bytes stay in the Blob
