@@ -61,6 +61,82 @@ The headline 200 MB fixture is a synthetic telemetry stream: 900,000 events, eac
 
 ---
 
+## Rust migration baseline — 2026-05-26 (Phase 0)
+
+Captured at the start of `RUST_MIGRATION_PLAN.md` Phase 0 — the "what we are trying not to break" reference. User overrode the post-launch deferral and started Phase 0 on this date. Brand decision was still pending at capture; the deferral reasoning (current 200 MB perf already under budget, Rust ROI is bad pre-launch) remains accurate but the user's prioritization changed.
+
+### Gates green at HEAD
+
+All run on 2026-05-26 against the working tree, no Rust code present:
+
+| Gate | Result |
+|---|---|
+| `npx tsc --noEmit -p .` | exit 0 |
+| `npx eslint .` | exit 0 (12 warnings, 0 errors) |
+| `npx vitest run` | 434 passing, 1 skipped, 32 test files |
+| `npm run build` | exit 0 |
+| `npm run test:e2e` | 31 passing |
+| `SMOKE=1 npm test -- --run benchmarks/smoke-200mb.test.ts` | **not run** — `benchmarks/corpus/telemetry-900000.json` fixture absent (regen via `npm run bench:gen` when needed). Documented gap, not a failure. |
+
+### Build artifact size at HEAD
+
+| Surface | Value | Source |
+|---|---|---|
+| PWA precache | **37 entries / 5277.83 KiB** | `vite-react-ssg` build output |
+| `dist/assets/monaco-*.js` | 2,587.99 kB (gzip 671.94 kB) | Monaco editor.api chunk (already tree-shaken) |
+| WASM blobs | 0 (no Rust yet) | — |
+
+### Baseline perf — what we MUST NOT regress
+
+Inherited from the 2026-05-22 W4-Mon cold-runs below. The numbers below ARE the "current TS" column of the Bar B perf-ROI table in `RUST_MIGRATION_PLAN.md` § Verification Framework — re-stated here so a single section captures the regression-test baseline:
+
+| Operation | Current TS measurement | Target if Rust |
+|---|---|---|
+| 200 MB JSON parse | **5.6 s** (35.6 MB/s) | ≤ 3.0 s |
+| 505 MB JSON parse | **13.9 s** (36.4 MB/s) | ≤ 7.0 s |
+| 200 MB NDJSON parse browser | **unmeasured** (HUD instrumentation gap) | ≤ 600 ms |
+| 200 MB heap steady | 1.16 GB | ≤ 1.16 GB |
+| 505 MB heap peak | 1.69 GB | document; no regression |
+| 200 MB search-keystroke INP worst | **168 ms** (under Chrome "good" 200 ms) | ≤ 168 ms |
+| 505 MB search-keystroke INP worst | **560 ms** (Chrome "needs improvement") | ≤ 300 ms — caveat: needs TS-side rep changes too |
+| `/large-json-viewer` Lighthouse Perf | 97 | ≥ 95 |
+| `/large-json-viewer` Lighthouse A11y | 100 | 100 |
+| Worker boot + parser ready | not separately measured | ≤ 200 ms (new budget — WASM init included) |
+
+### Go/no-go hypotheses (the bets we're making before building)
+
+These are the explicit predictions Phase 0 commits us to. If post-Phase-7 measurements miss any prediction by **> 30%**, the migration must stop and choose: (a) invest more in Rust-side optimization, (b) keep Rust only for the proven sub-feature, or (c) revert/park the migration. These are the same Bar B targets enumerated in `RUST_MIGRATION_PLAN.md`; restated as predictions, not aspirations:
+
+| Bet | Hypothesis | Stop condition |
+|---|---|---|
+| Parse speedup | Rust will beat TS 200 MB parse by ≥ 1.8× (5.6 s → ≤ 3.0 s) | Final ≥ 3.9 s = miss by >30% |
+| 500 MB scaling | Rust will beat TS 505 MB parse by ≥ 1.8× (13.9 s → ≤ 7.0 s) | Final ≥ 9.1 s = miss |
+| Memory reduction (200 MB heap) | No regression vs current 1.16 GB; ideally ≤ 900 MB | Heap > 1.51 GB = miss |
+| Search-INP improvement at 500 MB | Rust + TS-side rep changes drop INP from 560 ms → ≤ 300 ms worst | Final ≥ 390 ms = miss |
+| Schema refresh at 200 MB | In-parser-worker schema cuts refresh from ~2.5 s → ≤ 1.5 s | Final ≥ 1.95 s = miss |
+| WASM blob size | Compiled blob ≤ 250 KB gzipped | > 325 KB = miss; explicit keep/optimize decision required |
+| PWA precache delta | If `.wasm` precached, total stays ≤ 5600 KiB (vs baseline 5277.83) | > 5728 KiB (> +400 KB delta + 30% headroom) = miss |
+| Cold WASM compile + worker boot | ≤ 200 ms first-parse-ready | > 260 ms = miss |
+
+### Known measurement gaps at Phase 0
+
+These remain outstanding from the 2026-05-22 cold-run and must be measured against Rust too:
+
+- **200 MB NDJSON browser parse wall-clock** — HUD instrumentation gap, never captured. Both TS-fallback and Rust default need a number when Phase 5 ships.
+- **Search wall-clock at 200 MB** — only a subjective "fast" reading exists. Capture with a stopwatch on the post-byte-level-rewrite TS path (current default) before claiming Rust beats it.
+- **Cold-load page → first-parser-ready** — not separately broken out from total cold-load. Required for Phase 1 to compute WASM init delta honestly.
+- **Lighthouse panel on `/` route** — only `/large-json-viewer` is scored against the 90+ launch gate. Phase 7 (Rust default) should include a `/` re-score in case WASM cold-load affects FCP/LCP.
+
+### Phase 0 exit status
+
+- [x] Current main branch behavior documented (gates table + perf table above)
+- [x] Measurement gaps listed (4 enumerated)
+- [x] Go/no-go hypotheses written down (8 enumerated; stop conditions explicit)
+
+**Phase 0 complete.** Phase 1 (Rust/WASM skeleton) requires explicit greenlight before any Rust files land. Per the plan's Pre-Phase-0 Decisions, those decisions (deploy-artifact policy, toolchain pin, WASM offline policy, size budget, go/no-go hypothesis) must be resolved before Phase 1 commits.
+
+---
+
 ## Results — 2026-05-22 (W3-Thu→Fri overnight cold-runs)
 
 Captured against the production bundle through commit `5956906` (Memory HUD shipped, hydration regression fixed). The `?debug=1` Memory HUD provided heap + spine-count + line-count readouts directly, replacing the Performance-Monitor-only approach used on 2026-05-21. Closes two of the three "not measured" gaps below: 505 MB browser cold-run + 200 MB NDJSON browser cold-run.

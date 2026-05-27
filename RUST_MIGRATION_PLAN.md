@@ -1,9 +1,30 @@
 # Rust/WASM Migration Plan
 
-> **Status: deferred to post-launch (2026-05-26).** Park until either
-> (a) measured 200/500 MB performance becomes a launch blocker, or
-> (b) brand → SEO → cold-email → customer-discovery cycle completes
-> and Rust becomes the product priority.
+> **Status: Phase 0 complete; Phase 1 paused for brand session
+> (2026-05-27).** User overrode the earlier post-launch deferral and
+> ran Phase 0 baseline capture on 2026-05-26. Pre-Phase-0 Decisions
+> were resolved on 2026-05-27 (see below — all 5 resolved + 1 new
+> skill-ramp decision added). Phase 1 (Rust/WASM skeleton) is then
+> paused pending the brand session, which remains the load-bearing
+> launch unblock.
+>
+> Phase 0 baseline captured in `benchmarks/methodology.md`
+> § "Rust migration baseline — 2026-05-26 (Phase 0)" — gates green,
+> precache 5277.83 KiB / 37 entries, 8 go/no-go hypotheses with stop
+> conditions, 4 measurement gaps enumerated.
+>
+> **Phase 1 resumes after the brand session lands.** When that
+> happens, Pre-Phase-0 Decisions below are already resolved — Phase 1
+> can start with toolchain-version pick (the one deferred decision)
+> and proceed to skeleton work without re-deciding scope.
+>
+> **Original deferral reasoning** (still accurate; user overrode but
+> reasoning didn't change): brand decision is W2-Wed deadline slipped;
+> current 200 MB parse is already under the 60s budget (5.6 s
+> measured) and 200 MB INP is under Chrome's "good" 200 ms threshold
+> (168 ms measured). Rust would buy ~1.5-2× tokenization speedup
+> after 3-6 weeks of work — bad ROI vs. the launch path. See
+> `benchmarks/methodology.md` for the measurements.
 >
 > **Deferral rationale.** The immediate launch-path bottleneck is the
 > brand decision (W2-Wed deadline, slipped), not engine performance.
@@ -49,29 +70,45 @@
 
 ## Pre-Phase-0 Decisions
 
-Resolve these before adding any Rust files:
+Resolved before adding any Rust files (resolutions captured 2026-05-27):
 
-- **Deploy artifact policy:** during the migration, commit generated
-  `src/generated/json_engine/*` output so Cloudflare Pages can keep
-  using the simple npm static build. Revisit CI-generated artifacts
-  only after the engine is stable.
-- **Rust toolchain pin:** add `rust-toolchain.toml` with an exact
-  stable version chosen at implementation time, not an old example
-  version. Upgrade quarterly and immediately for relevant security or
-  wasm-bindgen advisories.
-- **WASM shipping and offline policy:** decide whether `.wasm` is
-  precached. If offline parsing must work, add `.wasm` to the Workbox
-  glob and track the precache delta. If not, document that the WASM
-  file is fetched through the browser HTTP cache.
-- **Size budget:** target `json_engine` WASM <= 250 KiB gzipped, with
-  any >400 KiB result requiring an explicit keep/optimize decision.
-  If `.wasm` is precached, keep total PWA precache growth <= 400 KiB.
-- **Go/no-go hypothesis:** after Phase 0 measurement, write the
-  expected gains before building: parse speedup, memory reduction,
-  search-INP improvement, and schema-refresh improvement. If the
-  relevant post-phase measurements miss those predictions by >30%,
-  stop and choose one of: optimize further, keep Rust only for the
-  proven sub-feature, or revert/park the migration.
+- **Deploy artifact policy: ✅ COMMIT generated WASM.** Commit
+  generated `src/generated/json_engine/*` output so Cloudflare Pages
+  keeps using the simple npm static build, no Rust toolchain install
+  in the deploy pipeline. Cost: ~200-400 KB binary in git on every
+  Rust change. Revisit CI-generated artifacts only after the engine
+  is stable. Resolution date: 2026-05-27.
+- **Rust toolchain pin: ⏳ DEFERRED to Phase 1 start.** Add
+  `rust-toolchain.toml` with an exact stable version chosen on the
+  day Phase 1 begins (not an old example version). Upgrade quarterly
+  and immediately for relevant security or wasm-bindgen advisories.
+  Picking the version now would lock in a stale toolchain by the time
+  Phase 1 actually starts post-brand.
+- **WASM shipping and offline policy: ✅ FULL OFFLINE.** Add `.wasm`
+  to the Workbox precache glob in `vite.config.ts` so the PWA keeps
+  the current offline-parsing guarantee. Track precache delta
+  against the Phase 0 baseline (5277.83 KiB → expected ≤ 5600 KiB).
+  Resolution date: 2026-05-27.
+- **Size budget: ✅ ≤ 250 KiB gzipped target.** Hard cap `json_engine`
+  WASM at ≤ 250 KiB gzipped, with any > 400 KiB result requiring an
+  explicit keep/optimize decision documented in
+  `launch-readiness-gate.md`. With `.wasm` precached, keep total PWA
+  precache growth ≤ 400 KiB delta from baseline. Resolution date:
+  2026-05-27.
+- **Go/no-go hypothesis: ✅ CAPTURED in methodology.md.** 8 hypotheses
+  with explicit > 30%-miss stop conditions documented in
+  `benchmarks/methodology.md` § "Rust migration baseline — 2026-05-26
+  (Phase 0)". If the relevant post-phase measurements miss those
+  predictions by > 30%, stop and choose one of: optimize further,
+  keep Rust only for the proven sub-feature, or revert/park the
+  migration. Resolution date: 2026-05-26.
+- **Skill ramp budget: ✅ 2-3 WEEKS RAMP before Phase 3.** Solo dev
+  new-to-Rust. Write a small Rust+WASM toy project first
+  (hello_world + tokenizer kata) before touching `json_engine`'s
+  primary parser. Reduces risk of conflating Rust unfamiliarity with
+  parser correctness bugs. Total migration estimate adjusts: ~6-8
+  weeks elapsed vs. plan's ~3-6 (the original number didn't budget
+  ramp time). Resolution date: 2026-05-27.
 
 ## JS Cleanup Checkpoint
 
