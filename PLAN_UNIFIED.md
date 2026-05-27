@@ -1,187 +1,156 @@
 # Unified Roadmap — json-tool
 
-> **Master plan — LOCKED 2026-05-27 late evening.** Engine-only
-> Rust is the final strategy. Synthesizes M1 carry-forwards +
-> M2 slices + Rust engine migration into one calendar.
->
-> **Active plans:**
-> - `RUST_MIGRATION_PLAN.md` — engine-only Rust port via wasm-pack-built WASM crate consumed by the TS app. 6-8 weeks.
-> - `PLAN.MD` — Month 1 wedge features (mostly shipped; remaining carry-forwards in `json-tool-app`)
-> - `PLAN_M2.md` — Month 2 differentiator features (Slice A shipped in TS; B/C/D pending)
->
-> **Parked alternatives** (design references only — NOT active):
-> - `RUST_REWRITE_PLAN.md` — full from-scratch Rust app. Was active briefly today; abandoned after cost re-review.
->
-> **Decision history** (preserved so future-self can audit): 5
-> Rust-scope flips on 2026-05-27 (engine-only → rewrite → engine-only
-> → rewrite → engine-only LOCKED). The "is this really what I want?"
-> pattern surfaced repeatedly; this file captures the final answer.
+> **Master plan.** The active product path is the existing
+> Vite/React/TypeScript app. Brand decision unblocks launch;
+> M2 features follow; M3 paid product comes after customer validation.
 
----
-
-## Status snapshot (2026-05-27 late evening)
+## Status snapshot
 
 | Track | State | Next action |
 |---|---|---|
-| **Existing TS app** (`json-tool-app` repo) | M1 + M2 Slice A shipped; ready to launch post-brand | Brand session → launch readiness → public launch |
-| **Rust engine crate** (`json-tool` repo, new) | Phase 0 toolchain installed; engine_version() smoke fn passing fmt/clippy/test; wasm-pack build pending verify | Install wasm-pack + verify WASM artifact builds |
-| **Brand decision** | Pending ~10 days | **W0 — same as before.** Required for TS-app launch. |
-| **Customer discovery** | Cold-email batches + 5 calls + 15 interviews | Runs in parallel, brand-coupled for outreach |
+| TS app (`~/Documents/json-tool`) | M1 shipped + M2 Slice A shipped (semantic diff lib + DiffPane + baseline) | Launch readiness + remaining M2 features |
+| Architecture cleanup | Schema worker root-clone elimination shipped (eliminates ~225 MB structured-clone on every Refresh) | Continue with TreeView orchestration extraction OR viewStore split |
+| Brand decision | Pending | **W0 launch unblock** — required for README, SEO copy, cold-email signature, domain |
+| Customer discovery | Pending batches + calls | Runs in parallel with launch work |
 
-## Two-repo structure (LOCKED)
+## The binding constraint — brand decision
 
-| Repo | Local path | Content | Status |
-|---|---|---|---|
-| `json-tool-app` | `~/Documents/json-tool-app/` | React/TS app — full M1 + M2 Slice A. Public-facing product. | Ships post-brand; consumes Rust engine via WASM |
-| `json-tool` | `~/Documents/json-tool/` (this repo) | Rust engine crate. Compiles to WASM via wasm-pack `--target web`. | Phase 0 scaffolded; Phase 1+ runs in parallel with TS-app launch |
+Brand session is W0 and gates:
+- README rewrite (~2 hr)
+- 4 SEO routes × ~1,500 words copy
+- OG metadata + Twitter handle + domain registration
+- Cold-email signature + sender domain
+- HN post + Reddit + Lobsters + Twitter launch
 
-**Artifact flow** (per pre-flight decision in `RUST_MIGRATION_PLAN.md`):
-- `json-tool` Rust repo builds WASM via `wasm-pack build crates/json_engine --target web --release`
-- Generated artifact at `crates/json_engine/pkg/` gets committed into `json-tool-app/src/generated/json_engine/` per the deploy-artifact policy (CF Pages keeps simple npm build, no Rust toolchain in deploy)
-- TS app imports the generated `.d.ts` + `.js` + `.wasm`
+Engineering work runs in parallel but doesn't substitute. 90-min focused session.
 
-## The binding constraint — brand decision (unchanged)
-
-Brand is W0. The TS app at `json-tool-app/` is launch-ready except for brand-coupled items (README, SEO copy, OG metadata, cold-email signature, domain). The Rust engine work runs in PARALLEL — it does NOT block launch.
-
-## Calendar — engine-only with TS-app launching in parallel
+## Calendar
 
 ```
-W0 (today): Brand session (90 min) — same as it's been for 10 days
-
-W1: TS app — launch readiness (SEO copy, _headers, robots, branch protection, e2e expansion)
-    Rust — wasm-pack install + Phase 0 verify (~half-day work; verify wasm-pack build succeeds + pkg/ artifact is consumable)
-    + LAUNCH the TS app at end of W1 (HN/Reddit/Lobsters/Twitter)
-
-W2: Cold-email batch 1 + customer call recruiting
-    Rust Phase 1 — toolchain decisions formalized + engine API design (parseFile + expandStub + searchStubs signatures)
-    M2 Slice B1 (API key UX) — in TS app, post-launch
-
-W3-W4: M2 Slice B (AI explanations) in TS app
-       Rust Phase 2 — engine parity work (identity, sampling, fixtures)
-       Customer discovery W2-W3 calls (2-3 calls)
-
-W5: M2 Slice B6 (cost circuit breaker) ships in TS app
-    Rust Phase 3 — first parse behind a flag in json-tool-app (consume pkg/ artifact, route ?engine=rust)
-    Customer call 4
-
-W6: M2 Slice C (NL→jq) starts
-    Rust Phase 4 — lazy stub-expand in Rust
-    Cold-email batch 2
-
-W7: M2 Slice C wraps
-    Rust Phase 5 — NDJSON path
-    Cold-email batch 1 reply review → Slice D gate decision
-
-W8: M2 Slice D1-D2 (waitlist + CTAs, GATED on persona overlap)
-    Rust Phase 6 — search slow-path
-
-W9: M2 Slice D3 (content posts)
-    Rust Phase 7 — default-flip gate (perf budgets met → flip default)
-    Architecture cleanup #1
-
-W10: M2 verification gates
-     Rust Phase 8 — schema inference in parser worker
-     Customer-discovery synthesis → M3 decision
-     Architecture cleanup #2
-
-W11 (slack): Rust Phase 9 (optional) + M3 prep
+W0 (now): Brand session (90 min)
+W1: Launch readiness (SEO copy, _headers, robots, branch protection,
+    e2e expansion) + LAUNCH (HN/Reddit/Lobsters/Twitter)
+W2: Cold-email batch 1 + customer call recruiting + M2 Slice B1
+    (API key UX, bring-your-own-key for AI explanations)
+W3-W4: M2 Slice B (AI grounded explanations — B2-B5: prompts,
+    ExplainPane, privacy framing, tests)
+W5: M2 Slice B6 (cost circuit breaker) + Customer calls 1-2
+W6: M2 Slice C1-C2 (NL→jq translation + jq-wasm runtime)
+W7: M2 Slice C3-C4 + cold-email batch 2
+W8: M2 Slice D1-D2 (waitlist + in-context CTAs, GATED on
+    persona-overlap data ≥ 10 responses with ≥ 3 showing overlap)
+W9: M2 Slice D3 (deep-dive content posts) + architecture cleanup
+W10: M2 verification gates + customer-discovery synthesis → M3 decision
 ```
 
-**Launch (public)** ≈ end of W1 / start of W2. **90-day "10 paying teams" goal stays achievable** (rough target W12-13 = ~3 months from today).
+90-day "10 paying teams" target around W12-13.
 
-## What does NOT happen under engine-only
+## Three orthogonal tracks
 
-- No UI rewrite — React/TS UI keeps shipping
-- No Monaco replacement — Monaco stays in the TS app
-- No `crates/json_tool_ui/` — only `crates/json_engine/` exists in the Rust repo
-- No 20-30-week elapsed-time hit
-- No 90-day goal void
-
-## Per-track detail
-
-### Track 1 — Launch readiness (TS app, W0-W1)
+### Track 1 — Launch readiness (W0-W1)
 
 Per `PLAN.MD` § Verification + `launch-readiness-gate.md`:
-- Brand session (90 min)
+
+- Brand decision (90 min)
 - README rewrite (brand-coupled)
-- SEO route copy × 4 (~6,000 words; brand-coupled)
+- 4 SEO routes × ~1,500 words content
 - `_headers` CSP / HSTS / COOP / XFO / Trusted Types
-- `robots.txt` flip to Allow + sitemap
+- `robots.txt` flip + sitemap
 - Branch protection on `main`
 - Playwright e2e suite expansion
 - Plausible custom events
 - HN + Reddit + Lobsters + Twitter posts queued
-- Repo flip public
+- Repo public flip on launch day
 
-### Track 2 — M2 features (TS app, W2-W10)
+### Track 2 — M2 features (W2-W10)
 
-Per `PLAN_M2.md`. Slice A shipped. Remaining:
-- Slice B (AI explanations) — ~5.5 days, W2-W5
-- Slice C (NL → jq) — ~4.5 days, W6-W7
-- Slice D (waitlist + CTAs + content posts) — ~5 days, W8-W9 (D1+D2 gated on persona data)
+Per `PLAN_M2.md`. Slice A shipped (semantic diff). Remaining:
 
-### Track 3 — Rust engine migration (json-tool repo, W1-W10)
+- **Slice B (AI grounded explanations)** — ~5.5 days, W2-W5
+  - B1: API key UX (WebCrypto-encrypted-at-rest localStorage)
+  - B2: Prompt engineering with JSON-path citation
+  - B3: ExplainPane UI + click-to-scroll-tree
+  - B4: Privacy framing banner
+  - B5: e2e + unit specs
+  - B6: Cost circuit breaker (per-call + per-session $ caps)
+- **Slice C (NL → jq)** — ~4.5 days, W6-W7
+  - C1: NL→jq translation via shared API key
+  - C2: jq-wasm runtime worker + render
+  - C3: Editable translation UI
+  - C4: e2e + unit specs
+- **Slice D (waitlist + CTAs + content posts)** — ~5 days, W8-W9
+  - D1: `/waitlist` form (GATED on persona-overlap data)
+  - D2: In-context CTAs at repair-fired + diff-detected moments (GATED same)
+  - D3: Two deep-dive content posts (NOT gated)
 
-Per `RUST_MIGRATION_PLAN.md`. Phase 0 toolchain done. Phases 1-9:
-- Phase 1: API design + skill ramp (~1 week)
-- Phase 2: Engine parity (identity, sampling) (~1 week)
-- Phase 3: First parse behind `?engine=rust` flag in TS app (~2 weeks)
-- Phase 3.5: Optimization passes (if Phase 3 misses perf budgets) (up to 1 week)
-- Phase 4: Interactive lazy stub-expand (~1 week)
-- Phase 5: NDJSON path (~1 week)
-- Phase 6: Search slow-path (~1 week)
-- Phase 7: Default-flip gate (~few days)
-- Phase 8: Schema inference in parser worker (~1 week)
-- Phase 9: Optional grind (~1 week)
+### Track 3 — Architecture cleanup (parallel)
 
-Pre-flight decisions all resolved per `RUST_MIGRATION_PLAN.md` § Pre-Phase-0 Decisions.
+Per `PLAN_M2.md` § Architecture cleanup track. Target: land at least 2 in M2.
 
-## Cut order — what goes if total slips
+- ✅ Schema worker root-clone elimination — shipped (~225 MB structured-clone removed per Refresh)
+- TreeView orchestration extraction (520 LOC)
+- `parse-streaming.ts` split (588 LOC)
+- TablePane decomposition (524 LOC)
+- viewStore split (`viewState` + `parserSession`)
+- Identity consistency pass
+- Stub-expand e2e + tree-row testids
+- Worker integration tests
+- React component test infrastructure
 
-Combined cut order:
+## M3 territory (not in current scope)
 
-1. **Rust Phase 9** (optional grind) — pure nice-to-have
-2. **M2 Slice C3** (editable jq translation) — feature works without it
-3. **M2 Slice D2** (in-context CTAs) — D1 waitlist ships alone
-4. **Rust Phase 8** (schema in parser worker) — defer to M3
-5. **M2 Slice D3** (content posts) — 2 → 1 → 0
-6. **Architecture cleanup items** — already deferred from M1
-7. **M2 Slice C entirely** (NL→jq)
-8. **Rust Phases 5-6** (NDJSON + search in Rust)
+These are future paid-product infrastructure:
 
-DO NOT CUT:
+- Node.js + TypeScript backend
+- Postgres (waitlist persistence beyond MVP Airtable/Notion)
+- Redis / BullMQ for jobs
+- Object storage at scale (R2 reserved for share-link blobs > 4 MB; URL-hash share shipped instead)
+- ClickHouse for SDK event analytics
+- Paid SDK (TS or Python — customer-discovery decides)
+
+## Cut order if M2 slips
+
+1. M2 Slice C3 (editable jq translation)
+2. M2 Slice D2 (in-context CTAs)
+3. Architecture cleanup items
+4. M2 Slice D3 (content posts)
+5. M2 Slice C entirely (NL→jq)
+
+**DO NOT CUT:**
 - Brand decision (binding constraint)
-- M2 Slice B (B1-B6 — load-bearing AI differentiator)
-- M2 Slice A (already shipped, just don't regress)
-- M2 Slice D1 (waitlist)
-- Rust Phases 1-4 if you've committed to Rust at all
+- M2 Slice B (B1-B6 — AI differentiator with cost-breaker safety)
+- M2 Slice A (shipped; just don't regress)
+- M2 Slice D1 (waitlist — only launch-traffic capture)
 - Track 1 launch-readiness items
 
-## Verification — three-bar framework (per migration plan)
+## Verification — M2 exit gates (per PLAN_M2.md)
 
-- **Bar A — Functional parity**: Rust engine produces same output as TS engine for all fixtures + e2e specs pass with `?engine=rust` flag
-- **Bar B — Performance ROI**: 11 perf budgets in `benchmarks/methodology.md` — any miss > 30% triggers stop/optimize/revert
-- **Bar C — Cleanup**: `?engine=rust` flag removed after default flip; TS parser path either gone or documented
-
-Single-question gate: "Are we done?" = Bar A green + Bar B budgets met + Bar C clean.
+| Gate | Measurement |
+|---|---|
+| Differentiator #2 shipped | Semantic diff + compare-to-sample (A shipped ✅) |
+| Differentiator #3 completed | AI grounded explanations shipped (Slice B) |
+| NL → jq shipped | Slice C live |
+| 200 waitlist signups | Track 2 conversion (D1) |
+| 10 verbal "yes I'd pay" commits | Customer-discovery output |
+| Pricing locked | Customer-discovery + P1 research |
+| ≥ 2 architecture cleanups landed | Schema worker root-clone done; one more needed |
+| Customer discovery synthesis | 15 interviews → continue / pivot wedge / pivot direction |
+| Disruption-risk hypothesis tested | GPT-4o strict mode failure-mode published |
 
 ## Cross-reference
 
-- `RUST_MIGRATION_PLAN.md` — **active** engine-only build plan
-- `RUST_REWRITE_PLAN.md` — parked full-rewrite design reference
-- `PLAN.MD` — M1 wedge features (mostly shipped in TS app)
-- `PLAN_M2.md` — M2 feature slices A/B/C/D (Slice A shipped, B/C/D pending)
+- `PLAN.MD` — M1 wedge features (mostly shipped)
+- `PLAN_M2.md` — M2 feature slices A/B/C/D
 - `PROJECT_PLAN.md` — 3-month strategic plan + three differentiators
 - `RESEARCH_PLAN.md` — customer-discovery Q1-Q7
-- `benchmarks/methodology.md` — perf baseline + parity floor
+- `benchmarks/methodology.md` — perf baseline + measurement protocol
 - `outreach/*.md` — cold-email, launch narratives, log
 - `launch-readiness-gate.md` — audit response status + soft blockers
 
-## Cadence (unchanged)
+## Cadence
 
 - Atomic slice per commit, 1-2 bullets max
-- Verify-then-commit (cargo check + clippy + test for Rust; tsc + lint + test for TS)
+- Verify-then-commit (tsc + lint + unit + e2e green)
 - `feat(...)` / `fix(...)` / `chore(...)` / `docs(...)` / `perf(...)` prefixes
-- No marketing verbs; no Claude attribution
+- No marketing verbs
 - Stage + draft + stop — user runs commits

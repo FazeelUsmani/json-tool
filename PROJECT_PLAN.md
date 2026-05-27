@@ -103,7 +103,7 @@ Secondary metrics:
 **Free-tool features:**
 - Paste / drag-drop / URL load
 - Format, minify, sort keys
-- **Huge-JSON handling (wedge feature).** Streaming parse (web worker + chunked parser like `stream-json` or a custom WASM parser) + virtualized tree rendering. Benchmark targets:
+- **Huge-JSON handling (wedge feature).** Streaming parse (web worker + chunked parser like `@streamparser/json`) + virtualized tree rendering. Benchmark targets:
   - 50MB: instant
   - 200MB: smooth tree expand/search
   - 500MB: usable (open, navigate, search) — most competitors crash here
