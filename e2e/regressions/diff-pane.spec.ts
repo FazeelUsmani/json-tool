@@ -30,10 +30,9 @@ test('Diff: Monaco DiffEditor mounts when tab is opened with loaded JSON', async
     page.locator('.monaco-diff-editor .editor.modified').first(),
   ).toBeVisible();
 
-  // Hint text labels the comparison.
-  await expect(
-    page.getByText(/paste a modified version/i),
-  ).toBeVisible();
+  // Pane headers label which side accepts input.
+  await expect(page.getByText(/original/i).first()).toBeVisible();
+  await expect(page.getByText(/paste your json here/i)).toBeVisible();
 });
 
 test('Diff: tab disabled until JSON is loaded', async ({ page }) => {
